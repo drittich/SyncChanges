@@ -32,6 +32,24 @@ namespace SyncChanges.Console
 
                 try
                 {
+                    /*
+                     * New Options:
+                     * - Enable Change Tracking on source
+                     * - Disable Change Tracking on source
+                     * - Reset Change Tracking on source (back to 0?)
+                     * - Enable Change Tracking on source related tables
+                     * - Disable Change Tracking on source non-related tables
+                     * - Create tables in destination(s)
+                     * - Do initial data population
+                     * - Sync required views
+                     * - Sync required TVFs
+                     * - Status: 
+                     *      - Is change tracking enabled on source?
+                     *      - What tables have change-tracking enabled?
+                     *      - What version are we at?
+                     *      - Whether tables exist and are populated on destination
+                     */
+
                     var options = new OptionSet {
                         { "h|help", "Show this message and exit", v => showHelp = v != null },
                         { "d|dryrun", "Do not alter target databases, only perform a test run", v => program.DryRun = v != null },
