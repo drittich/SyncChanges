@@ -136,6 +136,9 @@ namespace SyncChanges.Console
 						Log.Info($"Change Tracking Current Version: {(currentVersion == null ? "(none)" : currentVersion.ToString()) }");
 
 						// what tables have change tracking enabled
+						var enabledTables = synchronizer.GetChangeTrackingEnabledTables(replicationSet.Source.ConnectionString);
+						Log.Info($"Change Tracking Enabled Tables: {(!enabledTables.Any() ? "(none)" : "\n" + string.Join("\n", enabledTables))}");
+
 						// what tables and views are we syncing?
 						// what are the destination sync versions
 						// are destinations set up with SyncVersion table?

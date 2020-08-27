@@ -627,5 +627,22 @@ namespace SyncChanges
                     from sys.change_tracking_databases
                     where database_id = db_id()").Any();            
         }
+
+        /// <summary>
+        /// Returns the list of tables that change tracking is turned on for
+        /// </summary>
+        /// <param name="connectionString"></param>
+        /// <returns></returns>
+        public List<string> GetChangeTrackingEnabledTables(string connectionString)
+		{
+            var sql = @"
+                SELECT quotename(s.name) + '.' + quotename(t.name)
+                FROM sys.change_tracking_tables tr
+                INNER JOIN sys.tables t on t.object_id = tr.object_id
+                INNER JOIN sys.schemas s on s.schema_id = t.schema_id
+                order by 1";
+            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+                return db.Query<string>(sql).ToList();
+        }
     }
 }
