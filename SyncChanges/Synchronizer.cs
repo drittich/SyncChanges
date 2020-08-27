@@ -161,7 +161,7 @@ namespace SyncChanges
                     try
                     {
                         using (var db = GetDatabase(replicationSet.Source.ConnectionString, DatabaseType.SqlServer2008))
-                            version = db.ExecuteScalar<long>("select CHANGE_TRACKING_CURRENT_VERSION()");
+                            version = GetChangeTrackingCurrentVersion(db).Value;
 
                         Log.Debug($"Current version of source in replication set {replicationSet.Name} is {version}.");
 
@@ -396,7 +396,7 @@ namespace SyncChanges
                 else
                     Log.Info($"Snapshot isolation is not enabled in database {source.Name}, ignoring all changes above current version");
 
-                changeInfo.Version = db.ExecuteScalar<long>("select CHANGE_TRACKING_CURRENT_VERSION()");
+                changeInfo.Version = GetChangeTrackingCurrentVersion(db).Value;
                 Log.Info($"Current version of database {source.Name} is {changeInfo.Version}");
 
                 foreach (var table in tables)
@@ -568,7 +568,7 @@ namespace SyncChanges
                     if (!syncInfoTableExists)
                     {
                         Log.Info($"SyncInfo table does not exist in database {dbInfo.Name}");
-                        currentVersion = db.ExecuteScalar<long?>("select CHANGE_TRACKING_CURRENT_VERSION()") ?? -1;
+                        currentVersion = GetChangeTrackingCurrentVersion(db) ?? -1;
                         if (currentVersion < 0)
                         {
                             Log.Info($"Change tracking not enabled in database {dbInfo.Name}, assuming version 0");
@@ -592,6 +592,40 @@ namespace SyncChanges
                 Error = true;
                 return -1;
             }
+        }
+
+        /// <summary>
+        /// Gets the current version from the source db
+        /// </summary>
+        /// <param name="connectionString"></param>
+        /// <returns></returns>
+        public long? GetChangeTrackingCurrentVersion(string connectionString)
+        {
+            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+                return GetChangeTrackingCurrentVersion(db);
+        }
+        /// <summary>
+        /// Gets the current version from the source db
+        /// </summary>
+        /// <param name="db"></param>
+        /// <returns></returns>
+        public long? GetChangeTrackingCurrentVersion(Database db)
+        {
+            return db.ExecuteScalar<long?>("select CHANGE_TRACKING_CURRENT_VERSION()");
+        }
+
+        /// <summary>
+        /// Returns true if change tracking is enabled on source database
+        /// </summary>
+        /// <param name="connectionString"></param>
+        /// <returns></returns>
+        public bool GetChangeTrackingEnabled(string connectionString)
+		{
+            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+                return db.Query<object>(@"
+                    select null
+                    from sys.change_tracking_databases
+                    where database_id = db_id()").Any();            
         }
     }
 }
