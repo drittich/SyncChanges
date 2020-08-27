@@ -140,9 +140,18 @@ namespace SyncChanges.Console
 						Log.Info($"Change Tracking Enabled Tables: {(!enabledTables.Any() ? "(none)" : "\n" + string.Join("\n", enabledTables))}");
 
 						// what tables and views are we syncing?
+						List<SyncObject> syncObjects = synchronizer.GetSyncObjectsWithDependencies(replicationSet);
+						var syncTables = syncObjects.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name);
+						Log.Info($"Tables To Sync: {(!syncTables.Any() ? "(none)" : "\n" + string.Join("\n", syncTables))}");
+						var syncViews = syncObjects.Where(o => o.Type == SyncObject.ObjectType.View).Select(o => o.Name);
+						Log.Info($"Views To Sync: {(!syncViews.Any() ? "(none)" : "\n" + string.Join("\n", syncViews))}");
+
 						// what are the destination sync versions
+
 						// are destinations set up with SyncVersion table?
+
 						// Do destination tables exist?
+
 						// Are destination tables populated?
 
 

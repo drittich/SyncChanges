@@ -56,6 +56,11 @@ namespace SyncChanges
         /// The tables to be replicated.
         /// </value>
         public List<string> Tables { get; set; } = new List<string>();
+
+        /// <summary>
+        /// Gets or sets the names of the views to be replicated.
+        /// </summary>
+        public List<string> Views { get; set; } = new List<string>();
     }
 
     /// <summary>

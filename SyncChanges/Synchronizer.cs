@@ -1,6 +1,9 @@
 ﻿using Humanizer;
+
 using NLog;
+
 using NPoco;
+
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -9,201 +12,308 @@ using System.Threading;
 
 namespace SyncChanges
 {
-    /// <summary>
-    /// Allows replication of database changes from a source database to one or more destination databases.
-    /// </summary>
-    public class Synchronizer
-    {
-        /// <summary>
-        /// Gets or sets a value indicating whether destination databases will be modified during a replication run.
-        /// </summary>
-        /// <value>
-        ///   <c>true</c> if destination databases will be modified; otherwise, <c>false</c>.
-        /// </value>
-        public bool DryRun { get; set; } = false;
+	/// <summary>
+	/// Allows replication of database changes from a source database to one or more destination databases.
+	/// </summary>
+	public class Synchronizer
+	{
+		/// <summary>
+		/// Gets or sets a value indicating whether destination databases will be modified during a replication run.
+		/// </summary>
+		/// <value>
+		///   <c>true</c> if destination databases will be modified; otherwise, <c>false</c>.
+		/// </value>
+		public bool DryRun { get; set; } = false;
 
-        /// <summary>
-        /// Gets or sets the database connection timeout.
-        /// </summary>
-        /// <value>
-        /// The database connection timeout.
-        /// </value>
-        public int Timeout { get; set; } = 0;
+		/// <summary>
+		/// Gets or sets the database connection timeout.
+		/// </summary>
+		/// <value>
+		/// The database connection timeout.
+		/// </value>
+		public int Timeout { get; set; } = 0;
 
-        /// <summary>
-        /// Gets or sets the minimum synchronization time interval in seconds. Default is 30 seconds.
-        /// </summary>
-        /// <value>
-        /// The synchronization time interval in seconds.
-        /// </value>
-        public int Interval { get; set; } = 30;
+		/// <summary>
+		/// Gets or sets the minimum synchronization time interval in seconds. Default is 30 seconds.
+		/// </summary>
+		/// <value>
+		/// The synchronization time interval in seconds.
+		/// </value>
+		public int Interval { get; set; } = 30;
 
-        /// <summary>
-        /// Occurs when synchronization from a synchronization loop has succeeded.
-        /// </summary>
-        public event EventHandler<SyncEventArgs> Synced;
+		/// <summary>
+		/// Occurs when synchronization from a synchronization loop has succeeded.
+		/// </summary>
+		public event EventHandler<SyncEventArgs> Synced;
 
-        static Logger Log = LogManager.GetCurrentClassLogger();
-        Config Config { get; set; }
-        bool Error { get; set; }
+		static Logger Log = LogManager.GetCurrentClassLogger();
+		Config Config { get; set; }
+		bool Error { get; set; }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="Synchronizer"/> class.
-        /// </summary>
-        /// <param name="config">The configuration.</param>
-        /// <exception cref="System.ArgumentException"><paramref name="config"/> is null</exception>
-        public Synchronizer(Config config)
-        {
-            Config = config ?? throw new ArgumentException("config is null", nameof(config));
-        }
+		/// <summary>
+		/// Initializes a new instance of the <see cref="Synchronizer"/> class.
+		/// </summary>
+		/// <param name="config">The configuration.</param>
+		/// <exception cref="System.ArgumentException"><paramref name="config"/> is null</exception>
+		public Synchronizer(Config config)
+		{
+			Config = config ?? throw new ArgumentException("config is null", nameof(config));
+		}
 
-        private IList<IList<TableInfo>> Tables { get; } = new List<IList<TableInfo>>();
-        private bool Initialized = false;
+		private IList<IList<TableInfo>> Tables { get; } = new List<IList<TableInfo>>();
+		private bool Initialized = false;
 
-        /// <summary>
-        /// Initialize the synchronization process.
-        /// </summary>
-        public void Init()
-        {
-            if (Timeout != 0)
-                Log.Info($"Command timeout is {"second".ToQuantity(Timeout)}");
+		/// <summary>
+		/// Initialize the synchronization process.
+		/// </summary>
+		public void Init()
+		{
+			if (Timeout != 0)
+				Log.Info($"Command timeout is {"second".ToQuantity(Timeout)}");
 
-            for (int i = 0; i < Config.ReplicationSets.Count; i++)
-            {
-                var replicationSet = Config.ReplicationSets[i];
+			for (int i = 0; i < Config.ReplicationSets.Count; i++)
+			{
+				var replicationSet = Config.ReplicationSets[i];
 
-                Log.Info($"Getting replication information for replication set {replicationSet.Name}");
+				Log.Info($"Getting replication information for replication set {replicationSet.Name}");
 
-                var tables = GetTables(replicationSet.Source);
-                if (replicationSet.Tables != null && replicationSet.Tables.Any())
-                    tables = tables.Select(t => new { Table = t, Name = t.Name.Replace("[", "").Replace("]", "") })
-                        .Where(t => replicationSet.Tables.Any(r => r == t.Name || r == t.Name.Split('.')[1]))
-                        .Select(t => t.Table).ToList();
+				var tables = GetTables(replicationSet.Source);
+				if (replicationSet.Tables != null && replicationSet.Tables.Any())
+					tables = tables.Select(t => new { Table = t, Name = t.Name.Replace("[", "").Replace("]", "") })
+						.Where(t => replicationSet.Tables.Any(r => r == t.Name || r == t.Name.Split('.')[1]))
+						.Select(t => t.Table).ToList();
 
-                if (!tables.Any())
-                    Log.Warn("No tables to replicate (check if change tracking is enabled)");
-                else
-                    Log.Info($"Replicating {"table".ToQuantity(tables.Count, ShowQuantityAs.None)} {string.Join(", ", tables.Select(t => t.Name))}");
+				if (!tables.Any())
+					Log.Warn("No tables to replicate (check if change tracking is enabled)");
+				else
+					Log.Info($"Replicating {"table".ToQuantity(tables.Count, ShowQuantityAs.None)} {string.Join(", ", tables.Select(t => t.Name))}");
 
-                Tables.Add(tables);
-            }
+				Tables.Add(tables);
+			}
 
-            Initialized = true;
-        }
+			Initialized = true;
+		}
 
-        /// <summary>
-        /// Perform the synchronization.
-        /// </summary>
-        /// <returns>true, if the synchronization was successful; otherwise, false.</returns>
-        public bool Sync()
-        {
-            Error = false;
+		/// <summary>
+		/// Perform the synchronization.
+		/// </summary>
+		/// <returns>true, if the synchronization was successful; otherwise, false.</returns>
+		public bool Sync()
+		{
+			Error = false;
 
-            if (!Initialized) Init();
+			if (!Initialized) Init();
 
-            for (int i = 0; i < Config.ReplicationSets.Count; i++)
-            {
-                var replicationSet = Config.ReplicationSets[i];
-                var tables = Tables[i];
+			for (int i = 0; i < Config.ReplicationSets.Count; i++)
+			{
+				var replicationSet = Config.ReplicationSets[i];
+				var tables = Tables[i];
 
-                Sync(replicationSet, tables);
-            }
+				Sync(replicationSet, tables);
+			}
 
-            Log.Info($"Finished replication {(Error ? "with" : "without")} errors");
+			Log.Info($"Finished replication {(Error ? "with" : "without")} errors");
 
-            return !Error;
-        }
+			return !Error;
+		}
 
-        private bool Sync(ReplicationSet replicationSet, IList<TableInfo> tables, long sourceVersion = -1)
-        {
-            Error = false;
+		private bool Sync(ReplicationSet replicationSet, IList<TableInfo> tables, long sourceVersion = -1)
+		{
+			Error = false;
 
-            if (!tables.Any()) return true;
+			if (!tables.Any()) return true;
 
-            Log.Info($"Starting replication for replication set {replicationSet.Name}");
+			Log.Info($"Starting replication for replication set {replicationSet.Name}");
 
-            var destinationsByVersion = replicationSet.Destinations.GroupBy(d => GetCurrentVersion(d))
-                .Where(d => d.Key >= 0 && (sourceVersion < 0 || d.Key < sourceVersion)).ToList();
+			var destinationsByVersion = replicationSet.Destinations.GroupBy(d => GetCurrentVersion(d))
+				.Where(d => d.Key >= 0 && (sourceVersion < 0 || d.Key < sourceVersion)).ToList();
 
-            foreach (var destinations in destinationsByVersion)
-                Replicate(replicationSet.Source, destinations, tables);
+			foreach (var destinations in destinationsByVersion)
+				Replicate(replicationSet.Source, destinations, tables);
 
-            return !Error;
-        }
+			return !Error;
+		}
 
-        /// <summary>
-        /// Performs synchronization in an infinite loop. Periodically checks if source version has increased to trigger replication.
-        /// </summary>
-        /// <param name="token">The cancellation token.</param>
-        public void SyncLoop(CancellationToken token)
-        {
-            var currentVersions = Enumerable.Repeat(0L, Config.ReplicationSets.Count).ToList();
+		/// <summary>
+		/// Returns the specified tables and views from the config, along with all of the 
+		/// additional tables and function dependencies of the views
+		/// functions or other tables/views
+		/// </summary>
+		/// <param name="replicationSet"></param>
+		/// <returns></returns>
+		public List<SyncObject> GetSyncObjectsWithDependencies(ReplicationSet replicationSet)
+		{
+			var ret = new List<SyncObject>();
 
-            if (!Initialized) Init();
+			// figure out all the views we need
+			var requestedViews = replicationSet.Views;
+			var dependencyViews = GetDependencyViews(replicationSet.Source.ConnectionString, requestedViews);
+			var allViews = requestedViews.Concat(dependencyViews).Distinct().ToList();
+			foreach (var v in allViews)
+				ret.Add(new SyncObject() { Name = v, Type = SyncObject.ObjectType.View});
 
-            while (true)
-            {
-                if (token.IsCancellationRequested)
-                {
-                    Log.Info("Stopping replication.");
-                    return;
-                }
+			// now figure out all the tables we need
+			var requestedTables = replicationSet.Tables;
+			var dependencyTables = GetDependencyTablesForViews(replicationSet.Source.ConnectionString, allViews);
+			var allTables = requestedTables.Concat(dependencyTables).Distinct().ToList();
+			foreach (var t in allTables)
+				ret.Add(new SyncObject() { Name = t, Type = SyncObject.ObjectType.Table });
 
-                var start = DateTime.UtcNow;
-                Error = false;
+			// TODO: figure out what functions we need to sync for views
 
-                for (int i = 0; i < Config.ReplicationSets.Count; i++)
-                {
-                    var replicationSet = Config.ReplicationSets[i];
-                    var currentVersion = currentVersions[i];
-                    long version = 0;
+			return ret;
+		}
 
-                    try
-                    {
-                        using (var db = GetDatabase(replicationSet.Source.ConnectionString, DatabaseType.SqlServer2008))
-                            version = GetChangeTrackingCurrentVersion(db).Value;
+		/// <summary>
+		/// Given a list of views, returns a distinct list of views that
+		/// those views depend on.
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="views"></param>
+		/// <returns></returns>
+		private List<string> GetDependencyViews(string connectionString, List<string> views)
+		{
+			var ret = new List<string>();
 
-                        Log.Debug($"Current version of source in replication set {replicationSet.Name} is {version}.");
+			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+			{
+				foreach (var view in views)
+				{
+					var sql = @"
+						;with deps (child, parent) as (
+							select d.object_id as child, d.referenced_major_id as parent
+							from sys.sql_dependencies d
+							where d.object_id = object_id(@0)
 
-                        if (version > currentVersion)
-                        {
-                            Log.Info($"Current version of source in replication set {replicationSet.Name} has increased from {currentVersion} to {version}: Starting replication.");
+							union all
 
-                            var tables = Tables[i];
-                            var success = Sync(replicationSet, tables, version);
+							select d.object_id, d.referenced_major_id
+							from sys.sql_dependencies d
+							inner join deps on deps.parent = d.object_id
+						)
+						select distinct quotename(OBJECT_SCHEMA_NAME(parent)) + '.' + quotename(OBJECT_NAME(parent)) as Name
+						from deps";
+					var result = db.Query<string>(sql, view);
+					foreach (var r in result)
+						ret.Add(r);
+				}
+			}
 
-                            if (success) currentVersions[i] = version;
+			return ret.Distinct().ToList();
+		}
 
-                            Synced?.Invoke(this, new SyncEventArgs { ReplicationSet = replicationSet, Version = version });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Log.Error(ex, $"Error occurred during replication of set {replicationSet.Name}.");
-                        Error = true;
-                    }
+		/// <summary>
+		/// Given a list of views, this function returns a unique list of
+		/// all the tables those views depend on. 
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="views">Expects schema and object name, e.g., dbo.vUser</param>
+		/// <returns></returns>
+		private List<string> GetDependencyTablesForViews(string connectionString, List<string> views)
+		{
+			var ret = new List<string>();
 
-                    if (token.IsCancellationRequested)
-                    {
-                        Log.Info("Stopping replication.");
-                        return;
-                    }
-                }
+			var sql = @"
+				select distinct quotename(schema_name(o.schema_id)) + '.' + quotename(o.name)
+					-- schema_name(v.schema_id) as schema_name,
+					-- v.name as view_name,
+					-- schema_name(o.schema_id) as referenced_schema_name,
+					-- o.name as referenced_entity_name,
+					-- o.type_desc as entity_type
+				from sys.views v
+				inner join sys.sql_expression_dependencies d on d.referencing_id = v.object_id
+					and d.referenced_id is not null
+				inner join sys.objects o on o.object_id = d.referenced_id
+				where o.type_desc = 'USER_TABLE'
+					and (schema_name(v.schema_id) = PARSENAME(@0, 2) or PARSENAME(@0, 2) is null)
+					and v.name = PARSENAME(@0, 1) 
+				order by 1";
 
-                Log.Info($"Finished replication {(Error ? "with" : "without")} errors");
+			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+			{
+				foreach (var view in views)
+				{
+					var result = db.Query<string>(sql, view);
+					ret.Concat(result);
+				}
+			}
 
-                var delay = (int)Math.Round(Math.Max(0, (TimeSpan.FromSeconds(Interval) - (DateTime.UtcNow - start)).TotalSeconds) * 1000, MidpointRounding.AwayFromZero);
-                Thread.Sleep(delay);
-            }
-        }
+			return ret.Distinct().ToList();
+		}
 
-        private IList<TableInfo> GetTables(DatabaseInfo dbInfo)
-        {
-            try
-            {
-                using (var db = GetDatabase(dbInfo.ConnectionString, DatabaseType.SqlServer2008))
-                {
-                    var sql = @"select TableName, ColumnName, iif(max(cast(is_primary_key as tinyint)) = 1, 1, 0) PrimaryKey from
+		/// <summary>
+		/// Performs synchronization in an infinite loop. Periodically checks if source version has increased to trigger replication.
+		/// </summary>
+		/// <param name="token">The cancellation token.</param>
+		public void SyncLoop(CancellationToken token)
+		{
+			var currentVersions = Enumerable.Repeat(0L, Config.ReplicationSets.Count).ToList();
+
+			if (!Initialized) Init();
+
+			while (true)
+			{
+				if (token.IsCancellationRequested)
+				{
+					Log.Info("Stopping replication.");
+					return;
+				}
+
+				var start = DateTime.UtcNow;
+				Error = false;
+
+				for (int i = 0; i < Config.ReplicationSets.Count; i++)
+				{
+					var replicationSet = Config.ReplicationSets[i];
+					var currentVersion = currentVersions[i];
+					long version = 0;
+
+					try
+					{
+						using (var db = GetDatabase(replicationSet.Source.ConnectionString, DatabaseType.SqlServer2008))
+							version = GetChangeTrackingCurrentVersion(db).Value;
+
+						Log.Debug($"Current version of source in replication set {replicationSet.Name} is {version}.");
+
+						if (version > currentVersion)
+						{
+							Log.Info($"Current version of source in replication set {replicationSet.Name} has increased from {currentVersion} to {version}: Starting replication.");
+
+							var tables = Tables[i];
+							var success = Sync(replicationSet, tables, version);
+
+							if (success) currentVersions[i] = version;
+
+							Synced?.Invoke(this, new SyncEventArgs { ReplicationSet = replicationSet, Version = version });
+						}
+					}
+					catch (Exception ex)
+					{
+						Log.Error(ex, $"Error occurred during replication of set {replicationSet.Name}.");
+						Error = true;
+					}
+
+					if (token.IsCancellationRequested)
+					{
+						Log.Info("Stopping replication.");
+						return;
+					}
+				}
+
+				Log.Info($"Finished replication {(Error ? "with" : "without")} errors");
+
+				var delay = (int)Math.Round(Math.Max(0, (TimeSpan.FromSeconds(Interval) - (DateTime.UtcNow - start)).TotalSeconds) * 1000, MidpointRounding.AwayFromZero);
+				Thread.Sleep(delay);
+			}
+		}
+
+		private IList<TableInfo> GetTables(DatabaseInfo dbInfo)
+		{
+			try
+			{
+				using (var db = GetDatabase(dbInfo.ConnectionString, DatabaseType.SqlServer2008))
+				{
+					var sql = @"select TableName, ColumnName, iif(max(cast(is_primary_key as tinyint)) = 1, 1, 0) PrimaryKey from
                         (
                         select ('[' + s.name + '].[' + t.name + ']') TableName, ('[' + COL_NAME(t.object_id, a.column_id) + ']') ColumnName,
                         i.is_primary_key
@@ -218,15 +328,15 @@ namespace SyncChanges
                         group by TableName, ColumnName
                         order by TableName, ColumnName";
 
-                    var tables = db.Fetch<dynamic>(sql).GroupBy(t => t.TableName)
-                        .Select(g => new TableInfo
-                        {
-                            Name = (string)g.Key,
-                            KeyColumns = g.Where(c => (int)c.PrimaryKey > 0).Select(c => (string)c.ColumnName).ToList(),
-                            OtherColumns = g.Where(c => (int)c.PrimaryKey == 0).Select(c => (string)c.ColumnName).ToList()
-                        }).ToList();
+					var tables = db.Fetch<dynamic>(sql).GroupBy(t => t.TableName)
+						.Select(g => new TableInfo
+						{
+							Name = (string)g.Key,
+							KeyColumns = g.Where(c => (int)c.PrimaryKey > 0).Select(c => (string)c.ColumnName).ToList(),
+							OtherColumns = g.Where(c => (int)c.PrimaryKey == 0).Select(c => (string)c.ColumnName).ToList()
+						}).ToList();
 
-                    var fks = db.Fetch<ForeignKeyConstraint>(@"select obj.name AS ForeignKeyName,
+					var fks = db.Fetch<ForeignKeyConstraint>(@"select obj.name AS ForeignKeyName,
                             ('[' + sch.name + '].[' + tab1.name + ']') TableName,
                             ('[' +  col1.name + ']') ColumnName,
                             ('[' + sch2.name + '].[' + tab2.name + ']') ReferencedTableName,
@@ -248,401 +358,401 @@ namespace SyncChanges
                             on col2.column_id = referenced_column_id AND col2.object_id = tab2.object_id
                         where obj.is_disabled = 0");
 
-                    foreach (var table in tables)
-                        table.ForeignKeyConstraints = fks.Where(f => f.TableName == table.Name).ToList();
+					foreach (var table in tables)
+						table.ForeignKeyConstraints = fks.Where(f => f.TableName == table.Name).ToList();
 
-                    return tables;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Fatal(ex, "Error getting tables to replicate from source database");
-                throw;
-            }
-        }
+					return tables;
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Fatal(ex, "Error getting tables to replicate from source database");
+				throw;
+			}
+		}
 
-        private Database GetDatabase(string connectionString, DatabaseType databaseType = null)
-        {
-            var db = new Database(connectionString, databaseType ?? DatabaseType.SqlServer2005, System.Data.SqlClient.SqlClientFactory.Instance);
+		private Database GetDatabase(string connectionString, DatabaseType databaseType = null)
+		{
+			var db = new Database(connectionString, databaseType ?? DatabaseType.SqlServer2005, System.Data.SqlClient.SqlClientFactory.Instance);
 
-            if (Timeout != 0) db.CommandTimeout = Timeout;
+			if (Timeout != 0) db.CommandTimeout = Timeout;
 
-            return db;
-        }
+			return db;
+		}
 
-        private void Replicate(DatabaseInfo source, IGrouping<long, DatabaseInfo> destinations, IList<TableInfo> tables)
-        {
-            var changeInfo = RetrieveChanges(source, destinations, tables);
-            if (changeInfo == null) return;
+		private void Replicate(DatabaseInfo source, IGrouping<long, DatabaseInfo> destinations, IList<TableInfo> tables)
+		{
+			var changeInfo = RetrieveChanges(source, destinations, tables);
+			if (changeInfo == null) return;
 
-            // replicate changes to destinations
-            foreach (var destination in destinations)
-            {
-                try
-                {
-                    Log.Info($"Replicating {"change".ToQuantity(changeInfo.Changes.Count)} to destination {destination.Name}");
+			// replicate changes to destinations
+			foreach (var destination in destinations)
+			{
+				try
+				{
+					Log.Info($"Replicating {"change".ToQuantity(changeInfo.Changes.Count)} to destination {destination.Name}");
 
-                    using (var db = GetDatabase(destination.ConnectionString, DatabaseType.SqlServer2005))
-                    using (var transaction = db.GetTransaction(System.Data.IsolationLevel.ReadUncommitted))
-                    {
-                        try
-                        {
-                            var changes = changeInfo.Changes;
-                            var disabledForeignKeyConstraints = new Dictionary<ForeignKeyConstraint, long>();
+					using (var db = GetDatabase(destination.ConnectionString, DatabaseType.SqlServer2005))
+					using (var transaction = db.GetTransaction(System.Data.IsolationLevel.ReadUncommitted))
+					{
+						try
+						{
+							var changes = changeInfo.Changes;
+							var disabledForeignKeyConstraints = new Dictionary<ForeignKeyConstraint, long>();
 
-                            for (int i = 0; i < changes.Count; i++)
-                            {
-                                var change = changes[i];
-                                Log.Debug($"Replicating change #{i + 1} of {changes.Count} (Version {change.Version}, CreationVersion {change.CreationVersion})");
+							for (int i = 0; i < changes.Count; i++)
+							{
+								var change = changes[i];
+								Log.Debug($"Replicating change #{i + 1} of {changes.Count} (Version {change.Version}, CreationVersion {change.CreationVersion})");
 
-                                foreach (var fk in change.ForeignKeyConstraintsToDisable)
-                                {
-                                    if (disabledForeignKeyConstraints.TryGetValue(fk.Key, out long untilVersion))
-                                    {
-                                        // FK is already disabled, check if it needs to be deferred further than currently planned
-                                        if (fk.Value > untilVersion)
-                                            disabledForeignKeyConstraints[fk.Key] = fk.Value;
-                                    }
-                                    else
-                                    {
-                                        DisableForeignKeyConstraint(db, fk.Key);
-                                        disabledForeignKeyConstraints[fk.Key] = fk.Value;
-                                    }
-                                }
+								foreach (var fk in change.ForeignKeyConstraintsToDisable)
+								{
+									if (disabledForeignKeyConstraints.TryGetValue(fk.Key, out long untilVersion))
+									{
+										// FK is already disabled, check if it needs to be deferred further than currently planned
+										if (fk.Value > untilVersion)
+											disabledForeignKeyConstraints[fk.Key] = fk.Value;
+									}
+									else
+									{
+										DisableForeignKeyConstraint(db, fk.Key);
+										disabledForeignKeyConstraints[fk.Key] = fk.Value;
+									}
+								}
 
-                                PerformChange(db, change);
+								PerformChange(db, change);
 
-                                if ((i + 1) >= changes.Count || changes[i + 1].CreationVersion > change.CreationVersion) // there may be more than one change with the same CreationVersion
-                                {
-                                    foreach (var fk in disabledForeignKeyConstraints.Where(f => f.Value <= change.CreationVersion).Select(f => f.Key).ToList())
-                                    {
-                                        ReenableForeignKeyConstraint(db, fk);
-                                        disabledForeignKeyConstraints.Remove(fk);
-                                    }
-                                }
-                            }
+								if ((i + 1) >= changes.Count || changes[i + 1].CreationVersion > change.CreationVersion) // there may be more than one change with the same CreationVersion
+								{
+									foreach (var fk in disabledForeignKeyConstraints.Where(f => f.Value <= change.CreationVersion).Select(f => f.Key).ToList())
+									{
+										ReenableForeignKeyConstraint(db, fk);
+										disabledForeignKeyConstraints.Remove(fk);
+									}
+								}
+							}
 
-                            if (!DryRun)
-                            {
-                                SetSyncVersion(db, changeInfo.Version);
-                                transaction.Complete();
-                            }
+							if (!DryRun)
+							{
+								SetSyncVersion(db, changeInfo.Version);
+								transaction.Complete();
+							}
 
-                            Log.Info($"Destination {destination.Name} now at version {changeInfo.Version}");
-                        }
-                        catch (Exception ex)
-                        {
-                            Error = true;
-                            Log.Error(ex, $"Error replicating changes to destination {destination.Name}");
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Error = true;
-                    Log.Error(ex, $"Error replicating changes to destination {destination.Name}");
-                }
-            }
-        }
+							Log.Info($"Destination {destination.Name} now at version {changeInfo.Version}");
+						}
+						catch (Exception ex)
+						{
+							Error = true;
+							Log.Error(ex, $"Error replicating changes to destination {destination.Name}");
+						}
+					}
+				}
+				catch (Exception ex)
+				{
+					Error = true;
+					Log.Error(ex, $"Error replicating changes to destination {destination.Name}");
+				}
+			}
+		}
 
-        private void ReenableForeignKeyConstraint(Database db, ForeignKeyConstraint fk)
-        {
-            Log.Debug($"Re-enabling foreign key constraint {fk.ForeignKeyName}");
-            var sql = $"alter table {fk.TableName} with check check constraint {fk.ForeignKeyName}";
-            if (!DryRun)
-                db.Execute(sql);
-        }
+		private void ReenableForeignKeyConstraint(Database db, ForeignKeyConstraint fk)
+		{
+			Log.Debug($"Re-enabling foreign key constraint {fk.ForeignKeyName}");
+			var sql = $"alter table {fk.TableName} with check check constraint {fk.ForeignKeyName}";
+			if (!DryRun)
+				db.Execute(sql);
+		}
 
-        private void DisableForeignKeyConstraint(Database db, ForeignKeyConstraint fk)
-        {
-            Log.Debug($"Disabling foreign key constraint {fk.ForeignKeyName}");
-            var sql = $"alter table {fk.TableName} nocheck constraint {fk.ForeignKeyName}";
-            if (!DryRun)
-                db.Execute(sql);
-        }
+		private void DisableForeignKeyConstraint(Database db, ForeignKeyConstraint fk)
+		{
+			Log.Debug($"Disabling foreign key constraint {fk.ForeignKeyName}");
+			var sql = $"alter table {fk.TableName} nocheck constraint {fk.ForeignKeyName}";
+			if (!DryRun)
+				db.Execute(sql);
+		}
 
-        private void SetSyncVersion(Database db, long currentVersion)
-        {
-            if (!DryRun)
-            {
-                var syncInfoTableExists = db.ExecuteScalar<string>("select top(1) name from sys.tables where name ='SyncInfo'") != null;
+		private void SetSyncVersion(Database db, long currentVersion)
+		{
+			if (!DryRun)
+			{
+				var syncInfoTableExists = db.ExecuteScalar<string>("select top(1) name from sys.tables where name ='SyncInfo'") != null;
 
-                if (!syncInfoTableExists)
-                {
-                    db.Execute("create table SyncInfo (Id int not null primary key default 1 check (Id = 1), Version bigint not null)");
-                    db.Execute("insert into SyncInfo (Version) values (@0)", currentVersion);
-                }
-                else
-                {
-                    db.Execute("update SyncInfo set Version = @0", currentVersion);
-                }
-            }
-        }
+				if (!syncInfoTableExists)
+				{
+					db.Execute("create table SyncInfo (Id int not null primary key default 1 check (Id = 1), Version bigint not null)");
+					db.Execute("insert into SyncInfo (Version) values (@0)", currentVersion);
+				}
+				else
+				{
+					db.Execute("update SyncInfo set Version = @0", currentVersion);
+				}
+			}
+		}
 
-        private ChangeInfo RetrieveChanges(DatabaseInfo source, IGrouping<long, DatabaseInfo> destinations, IList<TableInfo> tables)
-        {
-            var destinationVersion = destinations.Key;
-            var changeInfo = new ChangeInfo();
-            var changes = new List<Change>();
+		private ChangeInfo RetrieveChanges(DatabaseInfo source, IGrouping<long, DatabaseInfo> destinations, IList<TableInfo> tables)
+		{
+			var destinationVersion = destinations.Key;
+			var changeInfo = new ChangeInfo();
+			var changes = new List<Change>();
 
-            using (var db = GetDatabase(source.ConnectionString, DatabaseType.SqlServer2008))
-            {
-                var snapshotIsolationEnabled = db.ExecuteScalar<int>("select snapshot_isolation_state from sys.databases where name = DB_NAME()") == 1;
-                if (snapshotIsolationEnabled)
-                {
-                    Log.Info($"Snapshot isolation is enabled in database {source.Name}");
-                    db.BeginTransaction(System.Data.IsolationLevel.Snapshot);
-                }
-                else
-                    Log.Info($"Snapshot isolation is not enabled in database {source.Name}, ignoring all changes above current version");
+			using (var db = GetDatabase(source.ConnectionString, DatabaseType.SqlServer2008))
+			{
+				var snapshotIsolationEnabled = db.ExecuteScalar<int>("select snapshot_isolation_state from sys.databases where name = DB_NAME()") == 1;
+				if (snapshotIsolationEnabled)
+				{
+					Log.Info($"Snapshot isolation is enabled in database {source.Name}");
+					db.BeginTransaction(System.Data.IsolationLevel.Snapshot);
+				}
+				else
+					Log.Info($"Snapshot isolation is not enabled in database {source.Name}, ignoring all changes above current version");
 
-                changeInfo.Version = GetChangeTrackingCurrentVersion(db).Value;
-                Log.Info($"Current version of database {source.Name} is {changeInfo.Version}");
+				changeInfo.Version = GetChangeTrackingCurrentVersion(db).Value;
+				Log.Info($"Current version of database {source.Name} is {changeInfo.Version}");
 
-                foreach (var table in tables)
-                {
-                    var tableName = table.Name;
-                    var minVersion = db.ExecuteScalar<long?>("select CHANGE_TRACKING_MIN_VALID_VERSION(OBJECT_ID(@0))", tableName);
+				foreach (var table in tables)
+				{
+					var tableName = table.Name;
+					var minVersion = db.ExecuteScalar<long?>("select CHANGE_TRACKING_MIN_VALID_VERSION(OBJECT_ID(@0))", tableName);
 
-                    Log.Info($"Minimum version of table {tableName} in database {source.Name} is {minVersion}");
+					Log.Info($"Minimum version of table {tableName} in database {source.Name} is {minVersion}");
 
-                    if (minVersion > destinationVersion)
-                    {
-                        Log.Error($"Cannot replicate table {tableName} to {"destination".ToQuantity(destinations.Count(), ShowQuantityAs.None)} {string.Join(", ", destinations.Select(d => d.Name))} because minimum source version {minVersion} is greater than destination version {destinationVersion}");
-                        Error = true;
-                        return null;
-                    }
+					if (minVersion > destinationVersion)
+					{
+						Log.Error($"Cannot replicate table {tableName} to {"destination".ToQuantity(destinations.Count(), ShowQuantityAs.None)} {string.Join(", ", destinations.Select(d => d.Name))} because minimum source version {minVersion} is greater than destination version {destinationVersion}");
+						Error = true;
+						return null;
+					}
 
-                    var sql = $@"select c.SYS_CHANGE_OPERATION, c.SYS_CHANGE_VERSION, c.SYS_CHANGE_CREATION_VERSION,
+					var sql = $@"select c.SYS_CHANGE_OPERATION, c.SYS_CHANGE_VERSION, c.SYS_CHANGE_CREATION_VERSION,
                         {string.Join(", ", table.KeyColumns.Select(c => "c." + c).Concat(table.OtherColumns.Select(c => "t." + c)))}
                         from CHANGETABLE (CHANGES {tableName}, @0) c
                         left outer join {tableName} t on ";
-                    sql += string.Join(" and ", table.KeyColumns.Select(k => $"c.{k} = t.{k}"));
-                    sql += " order by coalesce(c.SYS_CHANGE_CREATION_VERSION, c.SYS_CHANGE_VERSION)";
+					sql += string.Join(" and ", table.KeyColumns.Select(k => $"c.{k} = t.{k}"));
+					sql += " order by coalesce(c.SYS_CHANGE_CREATION_VERSION, c.SYS_CHANGE_VERSION)";
 
-                    Log.Debug($"Retrieving changes for table {tableName}: {sql}");
+					Log.Debug($"Retrieving changes for table {tableName}: {sql}");
 
-                    db.OpenSharedConnection();
-                    var cmd = db.CreateCommand(db.Connection, System.Data.CommandType.Text, sql, destinationVersion);
+					db.OpenSharedConnection();
+					var cmd = db.CreateCommand(db.Connection, System.Data.CommandType.Text, sql, destinationVersion);
 
-                    using (var reader = cmd.ExecuteReader())
-                    {
-                        var numChanges = 0;
+					using (var reader = cmd.ExecuteReader())
+					{
+						var numChanges = 0;
 
-                        while (reader.Read())
-                        {
-                            var col = 0;
-                            var change = new Change { Operation = ((string)reader[col])[0], Table = table };
-                            col++;
-                            var version = reader.GetInt64(col);
-                            change.Version = version;
-                            col++;
-                            var creationVersion = reader.IsDBNull(col) ? version : reader.GetInt64(col);
-                            change.CreationVersion = creationVersion;
-                            col++;
+						while (reader.Read())
+						{
+							var col = 0;
+							var change = new Change { Operation = ((string)reader[col])[0], Table = table };
+							col++;
+							var version = reader.GetInt64(col);
+							change.Version = version;
+							col++;
+							var creationVersion = reader.IsDBNull(col) ? version : reader.GetInt64(col);
+							change.CreationVersion = creationVersion;
+							col++;
 
-                            if (!snapshotIsolationEnabled && Math.Min(version, creationVersion) > changeInfo.Version)
-                            {
-                                Log.Warn($"Ignoring change version {Math.Min(version, creationVersion)}");
-                                continue;
-                            }
+							if (!snapshotIsolationEnabled && Math.Min(version, creationVersion) > changeInfo.Version)
+							{
+								Log.Warn($"Ignoring change version {Math.Min(version, creationVersion)}");
+								continue;
+							}
 
-                            for (int i = 0; i < table.KeyColumns.Count; i++, col++)
-                                change.Keys[table.KeyColumns[i]] = reader.GetValue(col);
-                            for (int i = 0; i < table.OtherColumns.Count; i++, col++)
-                                change.Others[table.OtherColumns[i]] = reader.GetValue(col);
+							for (int i = 0; i < table.KeyColumns.Count; i++, col++)
+								change.Keys[table.KeyColumns[i]] = reader.GetValue(col);
+							for (int i = 0; i < table.OtherColumns.Count; i++, col++)
+								change.Others[table.OtherColumns[i]] = reader.GetValue(col);
 
-                            changes.Add(change);
-                            numChanges++;
-                        }
+							changes.Add(change);
+							numChanges++;
+						}
 
-                        Log.Info($"Table {tableName} has {"change".ToQuantity(numChanges)}");
-                    }
-                }
+						Log.Info($"Table {tableName} has {"change".ToQuantity(numChanges)}");
+					}
+				}
 
-                if (snapshotIsolationEnabled)
-                    db.CompleteTransaction();
-            }
+				if (snapshotIsolationEnabled)
+					db.CompleteTransaction();
+			}
 
-            changeInfo.Changes.AddRange(changes.OrderBy(c => c.CreationVersion).ThenBy(c => c.Table.Name));
+			changeInfo.Changes.AddRange(changes.OrderBy(c => c.CreationVersion).ThenBy(c => c.Table.Name));
 
-            ComputeForeignKeyConstraintsToDisable(changeInfo);
+			ComputeForeignKeyConstraintsToDisable(changeInfo);
 
-            return changeInfo;
-        }
+			return changeInfo;
+		}
 
-        private void ComputeForeignKeyConstraintsToDisable(ChangeInfo changeInfo)
-        {
-            var changes = changeInfo.Changes;
-
-            for (int i = 0; i < changes.Count; i++)
-            {
-                var change = changes[i];
-                if (change.CreationVersion < change.Version) // was inserted then later updated
-                {
-                    for (int j = i + 1; j < changes.Count; j++)
-                    {
-                        var intermediateChange = changes[j];
-                        if (intermediateChange.CreationVersion > change.Version) // created later than last update to change
-                            break;
-                        if (intermediateChange.Operation != 'I') continue;
-
-                        // let's look at intermediateChange if it collides with change
-                        foreach (var fk in change.Table.ForeignKeyConstraints.Where(f => f.ReferencedTableName == intermediateChange.Table.Name))
-                        {
-                            var val = change.GetValue(fk.ColumnName);
-                            var refVal = intermediateChange.GetValue(fk.ReferencedColumnName);
-                            if (val != null && val.Equals(refVal))
-                            {
-                                // this foreign key constraint needs to be disabled
-                                Log.Info($"Foreign key constraint {fk.ForeignKeyName} needs to be disabled for change #{i + 1} from version {change.CreationVersion} until version {intermediateChange.CreationVersion}");
-                                change.ForeignKeyConstraintsToDisable[fk] = intermediateChange.CreationVersion;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        private void PerformChange(Database db, Change change)
-        {
-            var table = change.Table;
-            var tableName = table.Name;
-            var operation = change.Operation;
-
-            switch (operation)
-            {
-                // Insert
-                case 'I':
-                    var insertColumnNames = change.GetColumnNames();
-                    var insertSql = $"set IDENTITY_INSERT {tableName} ON; " +
-                        string.Format("insert into {0} ({1}) values ({2}); ", tableName,
-                        string.Join(", ", insertColumnNames),
-                        string.Join(", ", Parameters(insertColumnNames.Count))) +
-                        $"set IDENTITY_INSERT {tableName} OFF";
-                    var insertValues = change.GetValues();
-                    Log.Debug($"Executing insert: {insertSql} ({FormatArgs(insertValues)})");
-                    if (!DryRun)
-                        db.Execute(insertSql, insertValues);
-                    break;
-
-                // Update
-                case 'U':
-                    var updateColumnNames = change.Others.Keys.ToList();
-                    var updateSql = string.Format("update {0} set {1} where {2}", tableName,
-                        string.Join(", ", updateColumnNames.Select((c, i) => $"{c} = @{i + change.Keys.Count}")),
-                        PrimaryKeys(table, change));
-                    var updateValues = change.GetValues();
-                    Log.Debug($"Executing update: {updateSql} ({FormatArgs(updateValues)})");
-                    if (!DryRun)
-                        db.Execute(updateSql, updateValues);
-                    break;
-
-                // Delete
-                case 'D':
-                    var deleteSql = string.Format("delete from {0} where {1}", tableName, PrimaryKeys(table, change));
-                    var deleteValues = change.Keys.Values.ToArray();
-                    Log.Debug($"Executing delete: {deleteSql} ({FormatArgs(deleteValues)})");
-                    if (!DryRun)
-                        db.Execute(deleteSql, deleteValues);
-                    break;
-            }
-        }
-
-        private static string FormatArgs(object[] args) => string.Join(", ", args.Select((a, i) => $"@{i} = {a}"));
-
-        private static string PrimaryKeys(TableInfo table, Change change) =>
-            string.Join(" and ", change.Keys.Keys.Select((c, i) => $"{c} = @{i}"));
-
-        private static IEnumerable<string> Parameters(int n) => Enumerable.Range(0, n).Select(c => "@" + c);
-
-        private long GetCurrentVersion(DatabaseInfo dbInfo)
-        {
-            try
-            {
-                using (var db = GetDatabase(dbInfo.ConnectionString, DatabaseType.SqlServer2005))
-                {
-                    var syncInfoTableExists = db.ExecuteScalar<string>("select top(1) name from sys.tables where name ='SyncInfo'") != null;
-                    long currentVersion;
-
-                    if (!syncInfoTableExists)
-                    {
-                        Log.Info($"SyncInfo table does not exist in database {dbInfo.Name}");
-                        currentVersion = GetChangeTrackingCurrentVersion(db) ?? -1;
-                        if (currentVersion < 0)
-                        {
-                            Log.Info($"Change tracking not enabled in database {dbInfo.Name}, assuming version 0");
-                            currentVersion = 0;
-                        }
-                        else
-                            Log.Info($"Database {dbInfo.Name} is at version {currentVersion}");
-                    }
-                    else
-                    {
-                        currentVersion = db.ExecuteScalar<long>("select top(1) Version from SyncInfo");
-                        Log.Info($"Database {dbInfo.Name} is at version {currentVersion}");
-                    }
-
-                    return currentVersion;
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, $"Error getting current version of destination database {dbInfo.Name}. Skipping this destination.");
-                Error = true;
-                return -1;
-            }
-        }
-
-        /// <summary>
-        /// Gets the current version from the source db
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <returns></returns>
-        public long? GetChangeTrackingCurrentVersion(string connectionString)
-        {
-            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
-                return GetChangeTrackingCurrentVersion(db);
-        }
-        /// <summary>
-        /// Gets the current version from the source db
-        /// </summary>
-        /// <param name="db"></param>
-        /// <returns></returns>
-        public long? GetChangeTrackingCurrentVersion(Database db)
-        {
-            return db.ExecuteScalar<long?>("select CHANGE_TRACKING_CURRENT_VERSION()");
-        }
-
-        /// <summary>
-        /// Returns true if change tracking is enabled on source database
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <returns></returns>
-        public bool GetChangeTrackingEnabled(string connectionString)
+		private void ComputeForeignKeyConstraintsToDisable(ChangeInfo changeInfo)
 		{
-            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
-                return db.Query<object>(@"
+			var changes = changeInfo.Changes;
+
+			for (int i = 0; i < changes.Count; i++)
+			{
+				var change = changes[i];
+				if (change.CreationVersion < change.Version) // was inserted then later updated
+				{
+					for (int j = i + 1; j < changes.Count; j++)
+					{
+						var intermediateChange = changes[j];
+						if (intermediateChange.CreationVersion > change.Version) // created later than last update to change
+							break;
+						if (intermediateChange.Operation != 'I') continue;
+
+						// let's look at intermediateChange if it collides with change
+						foreach (var fk in change.Table.ForeignKeyConstraints.Where(f => f.ReferencedTableName == intermediateChange.Table.Name))
+						{
+							var val = change.GetValue(fk.ColumnName);
+							var refVal = intermediateChange.GetValue(fk.ReferencedColumnName);
+							if (val != null && val.Equals(refVal))
+							{
+								// this foreign key constraint needs to be disabled
+								Log.Info($"Foreign key constraint {fk.ForeignKeyName} needs to be disabled for change #{i + 1} from version {change.CreationVersion} until version {intermediateChange.CreationVersion}");
+								change.ForeignKeyConstraintsToDisable[fk] = intermediateChange.CreationVersion;
+							}
+						}
+					}
+				}
+			}
+		}
+
+		private void PerformChange(Database db, Change change)
+		{
+			var table = change.Table;
+			var tableName = table.Name;
+			var operation = change.Operation;
+
+			switch (operation)
+			{
+				// Insert
+				case 'I':
+					var insertColumnNames = change.GetColumnNames();
+					var insertSql = $"set IDENTITY_INSERT {tableName} ON; " +
+						string.Format("insert into {0} ({1}) values ({2}); ", tableName,
+						string.Join(", ", insertColumnNames),
+						string.Join(", ", Parameters(insertColumnNames.Count))) +
+						$"set IDENTITY_INSERT {tableName} OFF";
+					var insertValues = change.GetValues();
+					Log.Debug($"Executing insert: {insertSql} ({FormatArgs(insertValues)})");
+					if (!DryRun)
+						db.Execute(insertSql, insertValues);
+					break;
+
+				// Update
+				case 'U':
+					var updateColumnNames = change.Others.Keys.ToList();
+					var updateSql = string.Format("update {0} set {1} where {2}", tableName,
+						string.Join(", ", updateColumnNames.Select((c, i) => $"{c} = @{i + change.Keys.Count}")),
+						PrimaryKeys(table, change));
+					var updateValues = change.GetValues();
+					Log.Debug($"Executing update: {updateSql} ({FormatArgs(updateValues)})");
+					if (!DryRun)
+						db.Execute(updateSql, updateValues);
+					break;
+
+				// Delete
+				case 'D':
+					var deleteSql = string.Format("delete from {0} where {1}", tableName, PrimaryKeys(table, change));
+					var deleteValues = change.Keys.Values.ToArray();
+					Log.Debug($"Executing delete: {deleteSql} ({FormatArgs(deleteValues)})");
+					if (!DryRun)
+						db.Execute(deleteSql, deleteValues);
+					break;
+			}
+		}
+
+		private static string FormatArgs(object[] args) => string.Join(", ", args.Select((a, i) => $"@{i} = {a}"));
+
+		private static string PrimaryKeys(TableInfo table, Change change) =>
+			string.Join(" and ", change.Keys.Keys.Select((c, i) => $"{c} = @{i}"));
+
+		private static IEnumerable<string> Parameters(int n) => Enumerable.Range(0, n).Select(c => "@" + c);
+
+		private long GetCurrentVersion(DatabaseInfo dbInfo)
+		{
+			try
+			{
+				using (var db = GetDatabase(dbInfo.ConnectionString, DatabaseType.SqlServer2005))
+				{
+					var syncInfoTableExists = db.ExecuteScalar<string>("select top(1) name from sys.tables where name ='SyncInfo'") != null;
+					long currentVersion;
+
+					if (!syncInfoTableExists)
+					{
+						Log.Info($"SyncInfo table does not exist in database {dbInfo.Name}");
+						currentVersion = GetChangeTrackingCurrentVersion(db) ?? -1;
+						if (currentVersion < 0)
+						{
+							Log.Info($"Change tracking not enabled in database {dbInfo.Name}, assuming version 0");
+							currentVersion = 0;
+						}
+						else
+							Log.Info($"Database {dbInfo.Name} is at version {currentVersion}");
+					}
+					else
+					{
+						currentVersion = db.ExecuteScalar<long>("select top(1) Version from SyncInfo");
+						Log.Info($"Database {dbInfo.Name} is at version {currentVersion}");
+					}
+
+					return currentVersion;
+				}
+			}
+			catch (Exception ex)
+			{
+				Log.Error(ex, $"Error getting current version of destination database {dbInfo.Name}. Skipping this destination.");
+				Error = true;
+				return -1;
+			}
+		}
+
+		/// <summary>
+		/// Gets the current version from the source db
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <returns></returns>
+		public long? GetChangeTrackingCurrentVersion(string connectionString)
+		{
+			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+				return GetChangeTrackingCurrentVersion(db);
+		}
+		/// <summary>
+		/// Gets the current version from the source db
+		/// </summary>
+		/// <param name="db"></param>
+		/// <returns></returns>
+		public long? GetChangeTrackingCurrentVersion(Database db)
+		{
+			return db.ExecuteScalar<long?>("select CHANGE_TRACKING_CURRENT_VERSION()");
+		}
+
+		/// <summary>
+		/// Returns true if change tracking is enabled on source database
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <returns></returns>
+		public bool GetChangeTrackingEnabled(string connectionString)
+		{
+			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+				return db.Query<object>(@"
                     select null
                     from sys.change_tracking_databases
-                    where database_id = db_id()").Any();            
-        }
+                    where database_id = db_id()").Any();
+		}
 
-        /// <summary>
-        /// Returns the list of tables that change tracking is turned on for
-        /// </summary>
-        /// <param name="connectionString"></param>
-        /// <returns></returns>
-        public List<string> GetChangeTrackingEnabledTables(string connectionString)
+		/// <summary>
+		/// Returns the list of tables that change tracking is turned on for
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <returns></returns>
+		public List<string> GetChangeTrackingEnabledTables(string connectionString)
 		{
-            var sql = @"
+			var sql = @"
                 SELECT quotename(s.name) + '.' + quotename(t.name)
                 FROM sys.change_tracking_tables tr
                 INNER JOIN sys.tables t on t.object_id = tr.object_id
                 INNER JOIN sys.schemas s on s.schema_id = t.schema_id
                 order by 1";
-            using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
-                return db.Query<string>(sql).ToList();
-        }
-    }
+			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+				return db.Query<string>(sql).ToList();
+		}
+	}
 }
