@@ -122,7 +122,7 @@ namespace SyncChanges.Console
 				try
 				{
 					var synchronizer = new Synchronizer(config) { DryRun = DryRun, Timeout = Timeout };
-
+					var listSeparator = "\n\t";
 					foreach (var replicationSet in config.ReplicationSets)
 					{
 						Log.Info($"Replication Set: {replicationSet.Name}");
@@ -137,24 +137,33 @@ namespace SyncChanges.Console
 
 						// what tables have change tracking enabled
 						var enabledTables = synchronizer.GetChangeTrackingEnabledTables(replicationSet.Source.ConnectionString);
-						Log.Info($"Change Tracking Enabled Tables: {(!enabledTables.Any() ? "(none)" : "\n" + string.Join("\n", enabledTables))}");
+						Log.Info($"Change Tracking Enabled Tables: {(!enabledTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, enabledTables))}");
 
 						// what tables and views are we syncing?
 						List<SyncObject> syncObjects = synchronizer.GetSyncObjectsWithDependencies(replicationSet);
 						var syncTables = syncObjects.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name);
-						Log.Info($"Tables To Sync: {(!syncTables.Any() ? "(none)" : "\n" + string.Join("\n", syncTables))}");
+						Log.Info($"Tables To Sync: {(!syncTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, syncTables))}");
 						var syncViews = syncObjects.Where(o => o.Type == SyncObject.ObjectType.View).Select(o => o.Name);
-						Log.Info($"Views To Sync: {(!syncViews.Any() ? "(none)" : "\n" + string.Join("\n", syncViews))}");
+						Log.Info($"Views To Sync: {(!syncViews.Any() ? "(none)" : listSeparator + string.Join(listSeparator, syncViews))}");
 
-						// what are the destination sync versions
+						// these tables are requested to be synced, but do not have have
+						// change tracking enabled
+						var shouldBeEnabledButAreNot = syncTables.Where(t => !enabledTables.Any(e => e.ToLowerInvariant() == t.ToLowerInvariant()));
+						Log.Info($"Tables Without Change Tracking Enabled: {(!shouldBeEnabledButAreNot.Any() ? "(none)" : listSeparator + string.Join(listSeparator, shouldBeEnabledButAreNot))}");
 
-						// are destinations set up with SyncVersion table?
+						foreach(var destination in replicationSet.Destinations)
+						{
+							// what are the destination sync versions
 
-						// Do destination tables exist?
+							// are destinations set up with SyncVersion table?
 
-						// Are destination tables populated?
+							// Do destination tables exist?
+							var nonExistingTables = synchronizer.GetNonExistingSyncTables(destination.ConnectionString, syncTables);
+							Log.Info($"Tables Not Existing In Destination [{destination.Name}]: {(!nonExistingTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, nonExistingTables))}");
 
+							// Are destination tables populated?
 
+						}
 					}
 				}
 				catch (Exception ex)

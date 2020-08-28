@@ -166,6 +166,29 @@ namespace SyncChanges
 			return ret;
 		}
 
+		public List<string> GetNonExistingSyncTables(string connectionString, IEnumerable<string> syncTables)
+		{
+			var sql = @"
+				select null
+				from INFORMATION_SCHEMA.TABLES
+				where (PARSENAME(@table, 2) is null and TABLE_SCHEMA = 'dbo'
+						or PARSENAME(@table, 2) = TABLE_SCHEMA)
+					and PARSENAME(@table, 1) = TABLE_NAME";
+
+			var ret = new List<string>();
+
+			using (var cn = Sql.GetConnection(connectionString))
+			{
+				foreach(var table in syncTables)
+				{
+					if (!cn.Query(sql, new { table }).Any())
+						ret.Add(table);
+				}
+			}
+
+			return ret;
+		}
+
 		/// <summary>
 		/// Given a list of views, returns a distinct list of views that
 		/// those views depend on.
