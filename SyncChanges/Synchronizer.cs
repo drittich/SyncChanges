@@ -1,4 +1,6 @@
-﻿using Humanizer;
+﻿using Dapper;
+
+using Humanizer;
 
 using NLog;
 
@@ -150,7 +152,7 @@ namespace SyncChanges
 			var dependencyViews = GetDependencyViews(replicationSet.Source.ConnectionString, requestedViews);
 			var allViews = requestedViews.Concat(dependencyViews).Distinct().ToList();
 			foreach (var v in allViews)
-				ret.Add(new SyncObject() { Name = v, Type = SyncObject.ObjectType.View});
+				ret.Add(new SyncObject() { Name = v, Type = SyncObject.ObjectType.View });
 
 			// now figure out all the tables we need
 			var requestedTables = replicationSet.Tables;
@@ -175,27 +177,27 @@ namespace SyncChanges
 		{
 			var ret = new List<string>();
 
-			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+			var sql = @"
+				;with deps (child, parent) as (
+					select d.object_id as child, d.referenced_major_id as parent
+					from sys.sql_dependencies d
+					where d.object_id = object_id(@view)
+
+					union all
+
+					select d.object_id, d.referenced_major_id
+					from sys.sql_dependencies d
+					inner join deps on deps.parent = d.object_id
+				)
+				select distinct quotename(OBJECT_SCHEMA_NAME(parent)) + '.' + quotename(OBJECT_NAME(parent)) as Name
+				from deps";
+
+			using (var cn = Sql.GetConnection(connectionString))
 			{
 				foreach (var view in views)
 				{
-					var sql = @"
-						;with deps (child, parent) as (
-							select d.object_id as child, d.referenced_major_id as parent
-							from sys.sql_dependencies d
-							where d.object_id = object_id(@0)
-
-							union all
-
-							select d.object_id, d.referenced_major_id
-							from sys.sql_dependencies d
-							inner join deps on deps.parent = d.object_id
-						)
-						select distinct quotename(OBJECT_SCHEMA_NAME(parent)) + '.' + quotename(OBJECT_NAME(parent)) as Name
-						from deps";
-					var result = db.Query<string>(sql, view);
-					foreach (var r in result)
-						ret.Add(r);
+					var result = cn.Query<string>(sql, new { view });
+					ret.AddRange(result);
 				}
 			}
 

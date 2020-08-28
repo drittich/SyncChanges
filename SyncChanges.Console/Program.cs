@@ -159,7 +159,7 @@ namespace SyncChanges.Console
 				}
 				catch (Exception ex)
 				{
-					Log.Error(ex, $"Error getting status for configuration {configFile}");
+					Log.Error(ex, $"Error getting status for configuration [{configFile}]");
 					Error = true;
 				}
 			}
