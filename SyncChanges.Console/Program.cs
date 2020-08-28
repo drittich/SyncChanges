@@ -164,6 +164,8 @@ namespace SyncChanges.Console
 							// Are destination tables populated?
 
 						}
+
+						// what tables exist in the destination that we don't need?
 					}
 				}
 				catch (Exception ex)

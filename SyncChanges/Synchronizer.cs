@@ -266,7 +266,41 @@ namespace SyncChanges
 			return ret.Distinct().ToList();
 		}
 
-		public static void CreateTableInDestination(string sourceConnectionString, string destinationConnectiontring)
+		/// <summary>
+		/// This creates tables in the destination that do not exist
+		/// </summary>
+		/// <param name="sourceConnectionString"></param>
+		/// <param name="destinationConnectiontring"></param>
+		public static void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring)
+		{
+			var sql = @"
+				select  'create table [' + so.name + '] (' 
+					+ o.list + ')' 
+				from    sysobjects so
+				cross apply
+					(SELECT 
+						'  ['+column_name+'] ' + 
+						data_type + case data_type
+							when 'sql_variant' then ''
+							when 'text' then ''
+							when 'ntext' then ''
+							when 'xml' then ''
+							when 'decimal' then '(' + cast(numeric_precision as varchar) + ', ' + cast(numeric_scale as varchar) + ')'
+							else coalesce('('+case when character_maximum_length = -1 then 'MAX' else cast(character_maximum_length as varchar) end +')','') end +
+						  ', ' 
+					 from information_schema.columns where table_name = so.name
+					 order by ordinal_position
+					FOR XML PATH('')) o (list)
+				where   xtype = 'U'
+					AND name    NOT IN ('dtproperties')";
+		}
+
+		/// <summary>
+		/// This generates a CREATE TABLE statement from both source and destination and makes sure they match exactly
+		/// </summary>
+		/// <param name="sourceConnectionString"></param>
+		/// <param name="destinationConnectiontring"></param>
+		public static void CheckDestinationTableSchema(string sourceConnectionString, string destinationConnectiontring)
 		{
 			var sql = @"
 				select  'create table [' + so.name + '] (' 
