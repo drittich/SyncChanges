@@ -179,7 +179,7 @@ namespace SyncChanges
 
 			using (var cn = Sql.GetConnection(connectionString))
 			{
-				foreach(var table in syncTables)
+				foreach (var table in syncTables)
 				{
 					if (!cn.Query(sql, new { table }).Any())
 						ret.Add(table);
@@ -271,28 +271,61 @@ namespace SyncChanges
 		/// </summary>
 		/// <param name="sourceConnectionString"></param>
 		/// <param name="destinationConnectiontring"></param>
-		public static void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring)
+		public static void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
 		{
-			var sql = @"
-				select  'create table [' + so.name + '] (' 
-					+ o.list + ')' 
-				from    sysobjects so
-				cross apply
-					(SELECT 
-						'  ['+column_name+'] ' + 
-						data_type + case data_type
+			string createStatement = GetCreateTableStatement(sourceConnectionString, table, destinationSchema);
+
+			using (var cn = Sql.GetConnection(destinationConnectiontring))
+				cn.Execute(createStatement);
+		}
+
+		public static string GetCreateTableStatement(string connectionString, string table, string schema = null)
+		{
+			string createStatementSql;
+
+			using (var cn = Sql.GetConnection(connectionString))
+				createStatementSql = cn.Query<string>(GetCreateTableSelectStatement(), new { table, destinationSchema = schema }).Single();
+
+			return createStatementSql;
+		}
+
+		public static string GetCreateTableSelectStatement()
+		{
+			var createSelectStatementSql = @"
+				select 'create table [' + isnull(@destinationSchema, t.TABLE_SCHEMA) + '].[' + t.TABLE_NAME + '] (' 
+					+ o.columnList 
+					+ ')'
+				from INFORMATION_SCHEMA.TABLES t
+				cross apply (
+					SELECT
+						'  [' + c.column_name + '] ' + 
+						c.data_type + 
+						case c.data_type
+							when 'geography' then ''
+							when 'geometry' then ''
+							when 'hierarchyid' then ''
+							when 'ntext' then ''
 							when 'sql_variant' then ''
 							when 'text' then ''
-							when 'ntext' then ''
 							when 'xml' then ''
-							when 'decimal' then '(' + cast(numeric_precision as varchar) + ', ' + cast(numeric_scale as varchar) + ')'
-							else coalesce('('+case when character_maximum_length = -1 then 'MAX' else cast(character_maximum_length as varchar) end +')','') end +
-						  ', ' 
-					 from information_schema.columns where table_name = so.name
-					 order by ordinal_position
-					FOR XML PATH('')) o (list)
-				where   xtype = 'U'
-					AND name    NOT IN ('dtproperties')";
+							when 'datetime2' then '(' + cast(c.DATETIME_PRECISION as varchar) + ')'
+							when 'datetimeoffset' then '(' + cast(c.DATETIME_PRECISION as varchar) + ')'
+							when 'decimal' then '(' + cast(c.numeric_precision as varchar) + ', ' + cast(c.numeric_scale as varchar) + ')'
+							when 'numeric' then '(' + cast(c.numeric_precision as varchar) + ', ' + cast(c.numeric_scale as varchar) + ')'
+							when 'time' then '(' + cast(c.DATETIME_PRECISION as varchar) + ')'
+							else coalesce('(' + case when c.character_maximum_length = -1 then 'MAX' else cast(c.character_maximum_length as varchar) end +')','') 
+						end 
+						+   ', '
+					from information_schema.columns c
+					where c.TABLE_SCHEMA = t.TABLE_SCHEMA
+						and c.TABLE_NAME = t.TABLE_NAME
+					order by c.ordinal_position
+					FOR XML PATH('')
+				) o (columnList)
+				where t.TABLE_SCHEMA = isnull(PARSENAME(@table, 2), 'dbo')
+					and t.TABLE_NAME = PARSENAME(@table, 1)";
+
+			return createSelectStatementSql;
 		}
 
 		/// <summary>
@@ -300,28 +333,12 @@ namespace SyncChanges
 		/// </summary>
 		/// <param name="sourceConnectionString"></param>
 		/// <param name="destinationConnectiontring"></param>
-		public static void CheckDestinationTableSchema(string sourceConnectionString, string destinationConnectiontring)
+		public static bool IsTableSchemaInSync(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
 		{
-			var sql = @"
-				select  'create table [' + so.name + '] (' 
-					+ o.list + ')' 
-				from    sysobjects so
-				cross apply
-					(SELECT 
-						'  ['+column_name+'] ' + 
-						data_type + case data_type
-							when 'sql_variant' then ''
-							when 'text' then ''
-							when 'ntext' then ''
-							when 'xml' then ''
-							when 'decimal' then '(' + cast(numeric_precision as varchar) + ', ' + cast(numeric_scale as varchar) + ')'
-							else coalesce('('+case when character_maximum_length = -1 then 'MAX' else cast(character_maximum_length as varchar) end +')','') end +
-						  ', ' 
-					 from information_schema.columns where table_name = so.name
-					 order by ordinal_position
-					FOR XML PATH('')) o (list)
-				where   xtype = 'U'
-					AND name    NOT IN ('dtproperties')";
+			var sourceCreateSql = GetCreateTableStatement(sourceConnectionString, table);
+			var destinationCreateSql = GetCreateTableStatement(destinationConnectiontring, table, destinationSchema);
+
+			return sourceCreateSql.Equals(destinationCreateSql, StringComparison.OrdinalIgnoreCase);
 		}
 
 		/// <summary>
