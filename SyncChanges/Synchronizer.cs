@@ -250,15 +250,15 @@ namespace SyncChanges
 					and d.referenced_id is not null
 				inner join sys.objects o on o.object_id = d.referenced_id
 				where o.type_desc = 'USER_TABLE'
-					and (schema_name(v.schema_id) = PARSENAME(@0, 2) or PARSENAME(@0, 2) is null)
-					and v.name = PARSENAME(@0, 1) 
+					and schema_name(v.schema_id) = isnull(PARSENAME(@view, 2), 'dbo')
+					and v.name = PARSENAME(@view, 1) 
 				order by 1";
 
-			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
+			using (var cn = Sql.GetConnection(connectionString))
 			{
 				foreach (var view in views)
 				{
-					var result = db.Query<string>(sql, view);
+					var result = cn.Query<string>(sql, new { view });
 					ret.Concat(result);
 				}
 			}
