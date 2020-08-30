@@ -284,21 +284,25 @@ namespace SyncChanges
 			string createStatementSql;
 
 			using (var cn = Sql.GetConnection(connectionString))
-				createStatementSql = cn.Query<string>(GetCreateTableSelectStatement(), new { table, destinationSchema = schema }).Single();
+				createStatementSql = cn.Query<string>(GetGenerateCreateTableStatement(), new { table, destinationSchema = schema }).Single();
 
 			return createStatementSql;
 		}
 
-		public static string GetCreateTableSelectStatement()
+		public static string GetGenerateCreateTableStatement()
 		{
 			var createSelectStatementSql = @"
-				select 'create table [' + isnull(@destinationSchema, t.TABLE_SCHEMA) + '].[' + t.TABLE_NAME + '] (' 
+				--declare @table sysname = 'dbo.[TypeTest]'
+				--declare @destinationSchema sysname = null
+
+				select 'create table [' + isnull(@destinationSchema, t.TABLE_SCHEMA) + '].[' + t.TABLE_NAME + '] (' + char(10)
 					+ o.columnList 
 					+ ')'
 				from INFORMATION_SCHEMA.TABLES t
 				cross apply (
 					SELECT
-						'  [' + c.column_name + '] ' + 
+						char(9) + 
+						'[' + c.column_name + '] ' + 
 						c.data_type + 
 						case c.data_type
 							when 'geography' then ''
@@ -314,8 +318,9 @@ namespace SyncChanges
 							when 'numeric' then '(' + cast(c.numeric_precision as varchar) + ', ' + cast(c.numeric_scale as varchar) + ')'
 							when 'time' then '(' + cast(c.DATETIME_PRECISION as varchar) + ')'
 							else coalesce('(' + case when c.character_maximum_length = -1 then 'MAX' else cast(c.character_maximum_length as varchar) end +')','') 
-						end 
-						+   ', '
+						end +
+						case when IS_NULLABLE = 'NO' then ' not' else '' end + ' null' + 
+						',' + char(10)
 					from information_schema.columns c
 					where c.TABLE_SCHEMA = t.TABLE_SCHEMA
 						and c.TABLE_NAME = t.TABLE_NAME
@@ -323,7 +328,8 @@ namespace SyncChanges
 					FOR XML PATH('')
 				) o (columnList)
 				where t.TABLE_SCHEMA = isnull(PARSENAME(@table, 2), 'dbo')
-					and t.TABLE_NAME = PARSENAME(@table, 1)";
+					and t.TABLE_NAME = PARSENAME(@table, 1)      
+				";
 
 			return createSelectStatementSql;
 		}
