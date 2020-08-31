@@ -201,19 +201,31 @@ namespace SyncChanges
 			var ret = new List<string>();
 
 			var sql = @"
-				;with deps (child, parent) as (
-					select d.object_id as child, d.referenced_major_id as parent
-					from sys.sql_dependencies d
-					where d.object_id = object_id(@view)
-
+				;with DepTree (referenced_id, referenced_name, SchemaName)
+				 AS 
+				(
+					select o.[object_id] AS referenced_id , 
+						o.name AS referenced_name,
+						s.name  as SchemaName
+					from sys.objects o 
+					inner join sys.views v on o.object_id = v.object_id
+					inner join sys.schemas s on v.schema_id = s.schema_id
+					where o.name = PARSENAME(@view, 1)
+					and s.name = isnull(PARSENAME(@view, 2), 'dbo')
+    
 					union all
-
-					select d.object_id, d.referenced_major_id
-					from sys.sql_dependencies d
-					inner join deps on deps.parent = d.object_id
+    
+					select d1.referenced_id,  
+						OBJECT_NAME( d1.referenced_id),
+						s.name  as SchemaName
+					from sys.sql_expression_dependencies d1 
+					inner join DepTree r ON r.referenced_id = d1.referencing_id
+					inner join sys.views v on d1.referenced_id = v.object_id
+					inner join sys.schemas s on v.schema_id = s.schema_id
 				)
-				select distinct quotename(OBJECT_SCHEMA_NAME(parent)) + '.' + quotename(OBJECT_NAME(parent)) as Name
-				from deps";
+				select quotename(SchemaName) + '.' + quotename(referenced_name) as SchemaAndViewName
+				FROM DepTree 
+			";
 
 			using (var cn = Sql.GetConnection(connectionString))
 			{
@@ -271,6 +283,8 @@ namespace SyncChanges
 		/// </summary>
 		/// <param name="sourceConnectionString"></param>
 		/// <param name="destinationConnectiontring"></param>
+		/// <param name="table"></param>
+		/// <param name="destinationSchema"></param>
 		public static void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
 		{
 			string createStatement = GetCreateTableStatement(sourceConnectionString, table, destinationSchema);
@@ -279,6 +293,15 @@ namespace SyncChanges
 				cn.Execute(createStatement);
 		}
 
+		/// <summary>
+		/// Gets the SQL statement to generate the table to receive imported table.
+		/// This table will have no PK, triggers, indexes, calculated columns,
+		/// foreign key references, etc.
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="table"></param>
+		/// <param name="schema"></param>
+		/// <returns></returns>
 		public static string GetCreateTableStatement(string connectionString, string table, string schema = null)
 		{
 			string createStatementSql;
@@ -289,6 +312,10 @@ namespace SyncChanges
 			return createStatementSql;
 		}
 
+		/// <summary>
+		/// This gets the SQL statement that will iteself generate a CREATE TABLE sql statement.
+		/// </summary>
+		/// <returns></returns>
 		public static string GetGenerateCreateTableStatement()
 		{
 			var createSelectStatementSql = @"
@@ -339,6 +366,8 @@ namespace SyncChanges
 		/// </summary>
 		/// <param name="sourceConnectionString"></param>
 		/// <param name="destinationConnectiontring"></param>
+		/// <param name="table"></param>
+		/// <param name="destinationSchema"></param>
 		public static bool IsTableSchemaInSync(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
 		{
 			var sourceCreateSql = GetCreateTableStatement(sourceConnectionString, table);
