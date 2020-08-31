@@ -34,6 +34,7 @@ namespace SyncChanges.Console
 				var program = new Program();
 				var showHelp = false;
 				var showStatus = false;
+				var verboseLogging = false;
 
 				try
 				{
@@ -62,10 +63,9 @@ namespace SyncChanges.Console
 						{ "l|loop", "Perform replication in a loop, periodically checking for changes", v => program.Loop = v != null },
 						{ "i|interval=", "Replication interval in seconds (default is 30); only relevant in loop mode", (int v) => program.Interval = v },
 						{ "s|status", "Show status and exit", v => showStatus = v != null },
+						{ "v|verbose", "Verbose logging", v => verboseLogging = v != null },
 					};
-
 					program.ConfigFiles = options.Parse(args);
-
 					if (showHelp)
 					{
 						ShowHelp(options);
@@ -73,7 +73,7 @@ namespace SyncChanges.Console
 					}
 					if (showStatus)
 					{
-						program.ShowStatus(options);
+						program.ShowStatus(options, verboseLogging);
 						return 0;
 					}
 				}
@@ -102,7 +102,7 @@ namespace SyncChanges.Console
 			}
 		}
 
-		void ShowStatus(OptionSet options)
+		void ShowStatus(OptionSet options, bool verboseLogging)
 		{
 			foreach (var configFile in ConfigFiles)
 			{
@@ -137,32 +137,32 @@ namespace SyncChanges.Console
 
 						// what tables have change tracking enabled
 						var enabledTables = synchronizer.GetChangeTrackingEnabledTables(replicationSet.Source.ConnectionString);
-						Log.Info($"Change Tracking Enabled Tables: {(!enabledTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, enabledTables))}");
+						LogListMessage(enabledTables, "Change Tracking Enabled Tables", verboseLogging);
 
 						// what tables and views are we syncing?
 						List<SyncObject> syncObjects = synchronizer.GetSyncObjectsWithDependencies(replicationSet);
-						var syncTables = syncObjects.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name);
-						Log.Info($"Tables To Sync: {(!syncTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, syncTables))}");
 						var syncViews = syncObjects.Where(o => o.Type == SyncObject.ObjectType.View).Select(o => o.Name);
-						Log.Info($"Views To Sync: {(!syncViews.Any() ? "(none)" : listSeparator + string.Join(listSeparator, syncViews))}");
+						LogListMessage(syncViews, "Views To Sync", verboseLogging);
+
+						var syncTables = syncObjects.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name);
+						LogListMessage(syncTables, "Tables To Sync", verboseLogging);
 
 						// these tables are requested to be synced, but do not have have
 						// change tracking enabled
 						var shouldBeEnabledButAreNot = syncTables.Where(t => !enabledTables.Any(e => e.ToLowerInvariant() == t.ToLowerInvariant()));
-						Log.Info($"Tables Without Change Tracking Enabled: {(!shouldBeEnabledButAreNot.Any() ? "(none)" : listSeparator + string.Join(listSeparator, shouldBeEnabledButAreNot))}");
+						LogListMessage(shouldBeEnabledButAreNot, "Tables to Sync Without Change Tracking enabled", verboseLogging);
 
-						foreach(var destination in replicationSet.Destinations)
+						foreach (var destination in replicationSet.Destinations)
 						{
-							// what are the destination sync versions
-
 							// are destinations set up with SyncVersion table?
 
 							// Do destination tables exist?
 							var nonExistingTables = synchronizer.GetNonExistingSyncTables(destination.ConnectionString, syncTables);
-							Log.Info($"Tables Not Existing In Destination [{destination.Name}]: {(!nonExistingTables.Any() ? "(none)" : listSeparator + string.Join(listSeparator, nonExistingTables))}");
+							LogListMessage(nonExistingTables, $"Tables to sync not existing in destination [{destination.Name}]", verboseLogging);
 
 							// Are destination tables populated?
 
+							// what are the destination sync versions
 						}
 
 						// what tables exist in the destination that we don't need?
@@ -174,6 +174,16 @@ namespace SyncChanges.Console
 					Error = true;
 				}
 			}
+		}
+
+		private void LogListMessage(IEnumerable<string> list, string v, bool verboseLogging)
+		{
+			var listSeparator = "\n\t";
+
+			var msg = $"{v}: {list.Count()}";
+			if (verboseLogging && list.Any())
+				msg+= listSeparator + string.Join(listSeparator, list);
+			Log.Info(msg);
 		}
 
 		static void ShowHelp(OptionSet p)
