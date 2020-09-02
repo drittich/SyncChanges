@@ -23,6 +23,7 @@ namespace SyncChanges.Console
 		int Timeout = 0;
 		bool Loop = false;
 		int Interval = 30;
+		Dictionary<string, Config> configs = new Dictionary<string, Config>();
 
 		static int Main(string[] args)
 		{
@@ -31,10 +32,13 @@ namespace SyncChanges.Console
 			try
 			{
 				System.Console.OutputEncoding = Encoding.UTF8;
-				var program = new Program();
+
 				var showHelp = false;
 				var showStatus = false;
 				var verboseLogging = false;
+				var autopilot = false;
+
+				var program = new Program();
 
 				try
 				{
@@ -59,13 +63,17 @@ namespace SyncChanges.Console
 					options = new OptionSet {
 						{ "h|help", "Show this message and exit", v => showHelp = v != null },
 						{ "d|dryrun", "Do not alter target databases, only perform a test run", v => program.DryRun = v != null },
+						{ "a|autopilot", "Do whatever is needed to sync", v => autopilot = v != null },
 						{ "t|timeout=", "Database command timeout in seconds", (int v) => program.Timeout = v },
 						{ "l|loop", "Perform replication in a loop, periodically checking for changes", v => program.Loop = v != null },
 						{ "i|interval=", "Replication interval in seconds (default is 30); only relevant in loop mode", (int v) => program.Interval = v },
 						{ "s|status", "Show status and exit", v => showStatus = v != null },
 						{ "v|verbose", "Verbose logging", v => verboseLogging = v != null },
 					};
+
 					program.ConfigFiles = options.Parse(args);
+					program.LoadConfigs();
+
 					if (showHelp)
 					{
 						ShowHelp(options);
@@ -74,6 +82,12 @@ namespace SyncChanges.Console
 					if (showStatus)
 					{
 						program.ShowStatus(options, verboseLogging);
+						return 0;
+					}
+
+					if (autopilot)
+					{
+						program.AutoPilot(options, verboseLogging);
 						return 0;
 					}
 				}
@@ -102,7 +116,51 @@ namespace SyncChanges.Console
 			}
 		}
 
-		void ShowStatus(OptionSet options, bool verboseLogging)
+		private void AutoPilot(OptionSet options, bool verboseLogging)
+		{
+			Log.Info("Running Autopilot");
+
+			foreach (var key in configs.Keys)
+			{
+				Config config = configs[key];
+
+				foreach (var replicationSet in config.ReplicationSets)
+				{
+					try
+					{
+						var synchronizer = new Synchronizer(config) { DryRun = DryRun, Timeout = Timeout };
+
+						// enable Change Tracking on db if necessary
+						if (!synchronizer.GetChangeTrackingEnabled(replicationSet.Source.ConnectionString))
+							synchronizer.EnableChangeTrackingInDb(replicationSet.Source.ConnectionString);
+
+						// enable change tracking on tables to sync if necessary
+						var objectsToSync = synchronizer.GetSyncObjectsWithDependencies(replicationSet);
+						var tablesToSync = objectsToSync.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name).ToList();
+						var changeTrackingEnabledTables = synchronizer.GetChangeTrackingEnabledTables(replicationSet.Source.ConnectionString);
+						var tablesNeedingChangeTrackingEnabled = tablesToSync.Where(o => !changeTrackingEnabledTables.Contains(o));
+						if (tablesNeedingChangeTrackingEnabled.Any())
+							synchronizer.EnableChangeTrackingForTables(replicationSet.Source.ConnectionString, tablesNeedingChangeTrackingEnabled);
+
+						// create destination tables if necessary
+						synchronizer.GetNonExistingSyncTables()
+
+						// initial population of destination tables if necessary
+
+						// sync of destinatin tables
+						var success = synchronizer.Sync();
+						Error = Error || !success;
+					}
+					catch (Exception ex)
+					{
+						Log.Error(ex, $"Error running autopilot for configuration [{key}]");
+						Error = true;
+					}
+				}
+			}
+		}
+
+		void LoadConfigs()
 		{
 			foreach (var configFile in ConfigFiles)
 			{
@@ -111,6 +169,7 @@ namespace SyncChanges.Console
 				try
 				{
 					config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(configFile));
+					configs[configFile] = config;
 				}
 				catch (Exception ex)
 				{
@@ -118,11 +177,18 @@ namespace SyncChanges.Console
 					Error = true;
 					continue;
 				}
+			}
+		}
+
+		void ShowStatus(OptionSet options, bool verboseLogging)
+		{
+			foreach (var key in configs.Keys)
+			{
+				Config config = configs[key];
 
 				try
 				{
 					var synchronizer = new Synchronizer(config) { DryRun = DryRun, Timeout = Timeout };
-					var listSeparator = "\n\t";
 					foreach (var replicationSet in config.ReplicationSets)
 					{
 						Log.Info($"Replication Set: {replicationSet.Name}");
@@ -170,7 +236,7 @@ namespace SyncChanges.Console
 				}
 				catch (Exception ex)
 				{
-					Log.Error(ex, $"Error getting status for configuration [{configFile}]");
+					Log.Error(ex, $"Error getting status for configuration [{key}]");
 					Error = true;
 				}
 			}
@@ -182,7 +248,7 @@ namespace SyncChanges.Console
 
 			var msg = $"{v}: {list.Count()}";
 			if (verboseLogging && list.Any())
-				msg+= listSeparator + string.Join(listSeparator, list);
+				msg += listSeparator + string.Join(listSeparator, list);
 			Log.Info(msg);
 		}
 
@@ -197,20 +263,9 @@ namespace SyncChanges.Console
 
 		void Sync()
 		{
-			foreach (var configFile in ConfigFiles)
+			foreach (var key in configs.Keys)
 			{
-				Config config = null;
-
-				try
-				{
-					config = JsonConvert.DeserializeObject<Config>(File.ReadAllText(configFile));
-				}
-				catch (Exception ex)
-				{
-					Log.Error(ex, $"Error reading configuration file {configFile}");
-					Error = true;
-					continue;
-				}
+				Config config = configs[key];
 
 				try
 				{
@@ -234,7 +289,7 @@ namespace SyncChanges.Console
 				}
 				catch (Exception ex)
 				{
-					Log.Error(ex, $"Error synchronizing databases for configuration {configFile}");
+					Log.Error(ex, $"Error synchronizing databases for configuration {key}");
 					Error = true;
 				}
 			}

@@ -81,7 +81,8 @@ namespace SyncChanges
 
 				var tables = GetTables(replicationSet.Source);
 				if (replicationSet.Tables != null && replicationSet.Tables.Any())
-					tables = tables.Select(t => new { Table = t, Name = t.Name.Replace("[", "").Replace("]", "") })
+					tables = tables
+						.Select(t => new { Table = t, Name = t.Name.Replace("[", "").Replace("]", "") })
 						.Where(t => replicationSet.Tables.Any(r => r == t.Name || r == t.Name.Split('.')[1]))
 						.Select(t => t.Table).ToList();
 
@@ -136,6 +137,16 @@ namespace SyncChanges
 			return !Error;
 		}
 
+		public void EnableChangeTrackingInDb(string connectionString)
+		{
+			throw new NotImplementedException();
+		}
+
+		public void EnableChangeTrackingForTables(string connectionString, IEnumerable<string> tablesNeedingChangeTrackingEnabled)
+		{
+			throw new NotImplementedException();
+		}
+
 		/// <summary>
 		/// Returns the specified tables and views from the config, along with all of the 
 		/// additional tables and function dependencies of the views
@@ -166,6 +177,12 @@ namespace SyncChanges
 			return ret;
 		}
 
+		/// <summary>
+		/// Given a list of tables, returns the ones that do not exist in the destination database.
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="syncTables"></param>
+		/// <returns></returns>
 		public List<string> GetNonExistingSyncTables(string connectionString, IEnumerable<string> syncTables)
 		{
 			var sql = @"
