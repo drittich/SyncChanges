@@ -83,5 +83,10 @@ namespace SyncChanges
         /// The connection string.
         /// </value>
         public string ConnectionString { get; set; }
+
+        /// <summary>
+        /// The schema to create the tables in. Null means keep same schema as source
+        /// </summary>
+        public string Schema { get; set; }
     }
 }

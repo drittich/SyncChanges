@@ -302,7 +302,7 @@ namespace SyncChanges
 		/// <param name="destinationConnectiontring"></param>
 		/// <param name="table"></param>
 		/// <param name="destinationSchema"></param>
-		public static void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
+		public void CreateDestinationTable(string sourceConnectionString, string destinationConnectiontring, string table, string destinationSchema = null)
 		{
 			string createStatement = GetCreateTableStatement(sourceConnectionString, table, destinationSchema);
 

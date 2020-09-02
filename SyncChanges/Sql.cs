@@ -8,6 +8,11 @@ namespace SyncChanges
 {
 	public class Sql
 	{
+		/// <summary>
+		/// Returns an open db connection for the given connection string
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <returns></returns>
 		public static IDbConnection GetConnection(string connectionString)
 		{
 			if (string.IsNullOrWhiteSpace(connectionString))
@@ -20,27 +25,27 @@ namespace SyncChanges
 		}
 
 		/// <summary>
-		/// Object names may or may not include schema or quote delimiters ([])
+		/// Object names must include schema and may include quote delimiters ([])
 		/// This normalizes names so we can string compare for equivalence.
 		/// </summary>
 		/// <param name="name"></param>
 		/// <returns>A string like '[dbo].[myobjectname]'</returns>
 		public static string NormalizeObjectName(string name, string changeToSchema)
 		{
-			// Let's assume no one would name an object with a period
-			var hasSchema = name.Contains(".");
+			if (!name.Contains("."))
+				throw new Exception("name must include schema");
 
-			if (!hasSchema && string.IsNullOrWhiteSpace(changeToSchema))
-				throw new Exception("Schema must be supplied as part of name or via changeToSchema paramter");
+			// remove all square bracket so we start from a known place
+			var normalizedName = name.Replace("[", "").Replace("]", "").ToLowerInvariant();
 
-			;
+			var aName = name.Split(new char[] { '.' });
+			var schema = aName[0];
+			var nameOnly = aName[1];
 
-				// remove all square bracket so we start from a known place
-				var normalizedName = name.Replace("[", "").Replace("]", "").ToLowerInvariant();
+			if (!string.IsNullOrWhiteSpace(changeToSchema))
+				schema = changeToSchema;
 
-
-			if (name1 == name)
+			return $"[{schema}].[{nameOnly}]";
 		}
-
 	}
 }

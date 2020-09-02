@@ -141,15 +141,26 @@ namespace SyncChanges.Console
 						var tablesNeedingChangeTrackingEnabled = tablesToSync.Where(o => !changeTrackingEnabledTables.Contains(o));
 						if (tablesNeedingChangeTrackingEnabled.Any())
 							synchronizer.EnableChangeTrackingForTables(replicationSet.Source.ConnectionString, tablesNeedingChangeTrackingEnabled);
+						
+						foreach (var destination in replicationSet.Destinations)
+						{
+							// create destination schema if necessary
+							// TODO
 
-						// create destination tables if necessary
-						synchronizer.GetNonExistingSyncTables()
+							// create destination tables if necessary
+							var missingTables = synchronizer.GetNonExistingSyncTables(destination.ConnectionString, tablesToSync);
+							foreach (var table in missingTables)
+							{
+								synchronizer.CreateDestinationTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table, destination.Schema);
+							}
 
-						// initial population of destination tables if necessary
+							// initial population of destination tables if necessary
 
-						// sync of destinatin tables
-						var success = synchronizer.Sync();
-						Error = Error || !success;
+							// sync of destinatin tables
+							var success = synchronizer.Sync();
+							Error = Error || !success;
+
+						}
 					}
 					catch (Exception ex)
 					{
