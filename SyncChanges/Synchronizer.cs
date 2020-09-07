@@ -379,7 +379,7 @@ namespace SyncChanges
 		}
 
 		/// <summary>
-		/// This generates a CREATE TABLE statement from both source and destination and makes sure they match exactly
+		/// This compares CREATE TABLE statements from both source and destination and makes sure they match exactly
 		/// </summary>
 		/// <param name="sourceConnectionString"></param>
 		/// <param name="destinationConnectiontring"></param>

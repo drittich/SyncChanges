@@ -1,0 +1,73 @@
+{
+	"ReplicationSets": [
+		{
+			"Name": "sensei-dev",
+			"Source": {
+				"Name": "Primary",
+				"ConnectionString": "Server=(localdb)\\.\\sensei_share;AttachDbFileName=C:\\localdb\\working\\sensei_dev.mdf;Integrated Security=true;"
+			},
+			"Destinations": [
+				{
+					"Name": "Secondary 1",
+					"ConnectionString": "Data Source=DARCY-MBA;Initial Catalog=sync-test;Integrated Security=True;MultipleActiveResultSets=True"
+				}
+			],
+			"Tables": [
+				"dbo.AccountPortfolio",
+				"dbo.AccountPortfolioBusinessUnitHistory",
+				"dbo.AccountPortfolioLead",
+				"dbo.Attachment",
+				"dbo.BusinessUnit",
+				"dbo.Chatter",
+				"dbo.Company",
+				"dbo.Country",
+				"dbo.DataCategory",
+				"dbo.DataCategoryMeasure",
+				"dbo.DataElement",
+				"dbo.DataElementType",
+				"dbo.DataElementValue",
+				"dbo.DataElementValueHistory",
+				"dbo.DataElementValueMeasure",
+				"dbo.EntityReview",
+				"dbo.EntityStageGateSet",
+				"dbo.EntityTag",
+				"dbo.EntityTagHistory",
+				"dbo.Initiative",
+				"dbo.LikeComment",
+				"dbo.Milestone",
+				"dbo.MilestoneStatus",
+				"dbo.NewsArticleUser",
+				"dbo.ProductionReview",
+				"dbo.ProductionReviewUserProjectRole",
+				"dbo.Project",
+				"dbo.ProjectStageGate",
+				"dbo.ProjectStatus2",
+				"dbo.StageGate",
+				"dbo.StageGateSet",
+				"dbo.StateProvince",
+				"dbo.Tag",
+				"dbo.TagCategory",
+				"dbo.TaskExtra",
+				"dbo.TaskExtraType",
+				"dbo.Ticket",
+				"dbo.TicketChange",
+				"dbo.TicketChangeField",
+				"dbo.TicketChecklistItem",
+				"dbo.TicketChecklistItemHistory",
+				"dbo.TicketComment",
+				"dbo.TicketStatus",
+				"dbo.TicketTemplate",
+				"dbo.TicketTemplateToken",
+				"dbo.TimeSheetCache",
+				"dbo.User",
+				"dbo.UserExtra",
+				"dbo.UserExtraType",
+				"dbo.UserJobType",
+				"dbo.WebserviceRequest"
+			],
+			"Views": [
+				"dbo.vUser"
+			]
+		}
+	]
+}

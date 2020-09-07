@@ -29,6 +29,7 @@ namespace SyncChanges
 		/// This normalizes names so we can string compare for equivalence.
 		/// </summary>
 		/// <param name="name"></param>
+		/// <param name="changeToSchema"></param>
 		/// <returns>A string like '[dbo].[myobjectname]'</returns>
 		public static string NormalizeObjectName(string name, string changeToSchema)
 		{
@@ -38,7 +39,7 @@ namespace SyncChanges
 			// remove all square bracket so we start from a known place
 			var normalizedName = name.Replace("[", "").Replace("]", "").ToLowerInvariant();
 
-			var aName = name.Split(new char[] { '.' });
+			var aName = normalizedName.Split(new char[] { '.' });
 			var schema = aName[0];
 			var nameOnly = aName[1];
 
@@ -46,6 +47,18 @@ namespace SyncChanges
 				schema = changeToSchema;
 
 			return $"[{schema}].[{nameOnly}]";
+		}
+
+		/// <summary>
+		/// Compare object names for equality, taking into account that they may be in different schemas.
+		/// </summary>
+		/// <param name="name1"></param>
+		/// <param name="name2"></param>
+		/// <param name="changeToSchema"></param>
+		/// <returns></returns>
+		public static bool ObjectNamesAreEqual(string name1, string name2, string changeToSchema)
+		{
+			return NormalizeObjectName(name1, changeToSchema) == NormalizeObjectName(name2, changeToSchema);
 		}
 	}
 }
