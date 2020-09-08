@@ -132,13 +132,13 @@ namespace SyncChanges.Console
 
 						// enable Change Tracking on db if necessary
 						if (!synchronizer.GetChangeTrackingEnabled(replicationSet.Source.ConnectionString))
-							synchronizer.EnableChangeTrackingInDb(replicationSet.Source.ConnectionString);
+							synchronizer.EnableChangeTrackingInDb(replicationSet);
 
 						// enable change tracking on tables to sync if necessary
 						var objectsToSync = synchronizer.GetSyncObjectsWithDependencies(replicationSet);
 						var tablesToSync = objectsToSync.Where(o => o.Type == SyncObject.ObjectType.Table).Select(o => o.Name).ToList();
 						var changeTrackingEnabledTables = synchronizer.GetChangeTrackingEnabledTables(replicationSet.Source.ConnectionString);
-						var tablesNeedingChangeTrackingEnabled = tablesToSync.Where(o => !changeTrackingEnabledTables.Contains(o));
+						var tablesNeedingChangeTrackingEnabled = tablesToSync.Where(o => !changeTrackingEnabledTables.Any(et => Sql.ObjectNamesAreEqual(o, et, "dbo")));
 						if (tablesNeedingChangeTrackingEnabled.Any())
 							synchronizer.EnableChangeTrackingForTables(replicationSet.Source.ConnectionString, tablesNeedingChangeTrackingEnabled);
 						
@@ -155,6 +155,11 @@ namespace SyncChanges.Console
 							}
 
 							// initial population of destination tables if necessary
+							foreach(var table in tablesToSync)
+							{
+								if (Sql.GetTableRowCount(destination.ConnectionString, table) == 0)
+									Sql.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
+							}
 
 							// sync of destinatin tables
 							var success = synchronizer.Sync();

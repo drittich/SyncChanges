@@ -89,7 +89,7 @@ namespace SyncChanges
 				if (!tables.Any())
 					Log.Warn("No tables to replicate (check if change tracking is enabled)");
 				else
-					Log.Info($"Replicating {"table".ToQuantity(tables.Count, ShowQuantityAs.None)} {string.Join(", ", tables.Select(t => t.Name))}");
+					Log.Info($"Replicating {"table".ToQuantity(tables.Count, ShowQuantityAs.None)} \n\t{string.Join("\n\t", tables.Select(t => t.Name))}");
 
 				Tables.Add(tables);
 			}
@@ -137,14 +137,34 @@ namespace SyncChanges
 			return !Error;
 		}
 
-		public void EnableChangeTrackingInDb(string connectionString)
+		public void EnableChangeTrackingInDb(ReplicationSet replicationSet, bool enable = true)
 		{
-			throw new NotImplementedException();
+			var dbName = Sql.GetDbNameFromConnectionString(replicationSet.Source.ConnectionString);
+			var sql = $@"alter database [{dbName}] set CHANGE_TRACKING = ON (CHANGE_RETENTION = 2 DAYS, AUTO_CLEANUP = ON)";
+			using (var cn = Sql.GetConnection(replicationSet.Source.ConnectionString))
+				cn.Execute(sql);
 		}
 
-		public void EnableChangeTrackingForTables(string connectionString, IEnumerable<string> tablesNeedingChangeTrackingEnabled)
+		/// <summary>
+		/// Turn on SQL Change Tracking for the given tables.
+		/// Assumes we do not want Column Tracking enabled.
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="tables"></param>
+		public void EnableChangeTrackingForTables(string connectionString, IEnumerable<string> tables)
 		{
-			throw new NotImplementedException();
+			using (var cn = Sql.GetConnection(connectionString))
+			{
+				foreach (var table in tables)
+				{
+					var sql = $@"
+						alter table {Sql.NormalizeObjectName(table, null)}
+						enable CHANGE_TRACKING
+						with (TRACK_COLUMNS_UPDATED = OFF)";
+
+					cn.Execute(sql);
+				}
+			}
 		}
 
 		/// <summary>

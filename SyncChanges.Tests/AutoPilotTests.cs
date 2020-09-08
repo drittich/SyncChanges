@@ -192,6 +192,13 @@ namespace SyncChanges.Tests
 		}
 
 		[Test]
+		public void CanEnabledChangeTracking()
+		{
+			var synchronizer = new Synchronizer(TestConfig);
+
+			synchronizer.EnableChangeTrackingInDb(TestConfig.ReplicationSets.First());
+		}
+		[Test]
 		public void CanDetectChangeTrackingEnabled() { Assert.Fail(); }
 		[Test]
 		public void CanDetectTableChangeTrackingEnabled() { Assert.Fail(); }
@@ -218,7 +225,8 @@ namespace SyncChanges.Tests
 				Assert.AreEqual(Sql.NormalizeObjectName(test.Item1, test.Item2), test.Item3);
 		}
 		[Test]
-		public void CanCompareObjectNames() {
+		public void CanCompareObjectNames()
+		{
 
 			Assert.IsTrue(Sql.ObjectNamesAreEqual("dbo.User", "dbo.user", "target"));
 		}

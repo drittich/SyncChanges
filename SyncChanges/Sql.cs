@@ -2,7 +2,10 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Linq;
 using System.Text;
+
+using Dapper;
 
 namespace SyncChanges
 {
@@ -59,6 +62,46 @@ namespace SyncChanges
 		public static bool ObjectNamesAreEqual(string name1, string name2, string changeToSchema)
 		{
 			return NormalizeObjectName(name1, changeToSchema) == NormalizeObjectName(name2, changeToSchema);
+		}
+
+		/// <summary>
+		/// Returns the db name from the connection string
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <returns></returns>
+		public static string GetDbNameFromConnectionString(string connectionString)
+		{
+			var builder = new SqlConnectionStringBuilder(connectionString);
+
+			//string server = builder.DataSource;
+			string database = builder.InitialCatalog;
+
+			return database;
+		}
+
+		/// <summary>
+		/// Gets the number of rows in the given table
+		/// </summary>
+		/// <param name="connectionString"></param>
+		/// <param name="table"></param>
+		/// <returns></returns>
+		public static int GetTableRowCount(string connectionString, string table)
+		{
+			var sql = $@"select count(*) from {NormalizeObjectName(table, null)}";
+			using (var cn = Sql.GetConnection(connectionString))
+				return cn.Query<int>(sql).Single();
+		}
+
+		/// <summary>
+		/// Making use of SQL Change Tracking, does the initial data
+		/// population to bring the source and destination tables in sync
+		/// </summary>
+		/// <param name="sourceConnectionString"></param>
+		/// <param name="destinationConnectionString"></param>
+		/// <param name="table"></param>
+		public static void DoInitialDataPopulationForTable(string sourceConnectionString, string destinationConnectionString, string table)
+		{
+			throw new NotImplementedException();
 		}
 	}
 }
