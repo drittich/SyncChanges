@@ -16,7 +16,7 @@ namespace SyncChanges
 		/// </summary>
 		/// <param name="connectionString"></param>
 		/// <returns></returns>
-		public static IDbConnection GetConnection(string connectionString)
+		public static SqlConnection GetConnection(string connectionString)
 		{
 			if (string.IsNullOrWhiteSpace(connectionString))
 				throw new Exception("Db connection string is empty");

@@ -144,7 +144,7 @@ namespace SyncChanges.Console
 						
 						foreach (var destination in replicationSet.Destinations)
 						{
-							//TODO: ensure PKs exist on new tables; do this before creating/updating anything so we 
+							// TODO: ensure PKs exist on new tables; do this before creating/updating anything so we 
 							// can bail quickly if needed
 
 							// TODO: create destination schema if necessary

@@ -9,6 +9,8 @@ using NPoco;
 using System;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Data.SqlClient;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -210,25 +212,83 @@ namespace SyncChanges
 			// TODO: how do we save this with SyncChanges on initial load?
 			// Obtain the current synchronization version. This will be used next time that changes are obtained.
 			long? curVersion = GetChangeTrackingCurrentVersion(sourceConnectionString);
-			var pkColumns = Sql.GetPkColumnsForTable(sourceConnectionString, table);
-
-			var batch = Sql.GetBatchFromTable(sourceConnectionString, table, pkColumns, 500);
-			batch.First().
-			using (var cn = Sql.GetConnection(sourceConnectionString))
-				cn.
-
-
-
-
-				// import all data
-				var sql = @"
-				-- Obtain initial data set.
-				SELECT P.ProductID, P.Name, P.ListPrice
-				FROM SalesLT.Product AS P
-			";
-
-			// 
+			BulkCopy(sourceConnectionString, destinationConnectionString, curVersion, table, null, true);
 		}
+
+		private static void BulkCopy(string sourceConnectionString, string destinationConnectionString, long? curVersion, string sourceTable, string destinationTable = null, bool truncateFirst = false)
+		{
+			if (destinationTable == null)
+				destinationTable = sourceTable;
+
+			destinationTable = Sql.NormalizeObjectName(destinationTable, null);
+
+			Console.WriteLine($"Bulk-copying table {sourceTable}");
+
+			var sw = Stopwatch.StartNew();
+			using (var cnSource = Sql.GetConnection(sourceConnectionString))
+			{
+				// TODO: modify this select to exclude INSERTs from versions higher than curVersion
+				var sqlSelectAll = $@"select * from {Sql.NormalizeObjectName(sourceTable, null)}";
+				var cmdSelectAll = new SqlCommand(sqlSelectAll, cnSource);
+
+				using (var rdr = cmdSelectAll.ExecuteReader())
+				{
+					using (var cnDestination = Sql.GetConnection(destinationConnectionString))
+					{
+						if (truncateFirst)
+						{
+							var cmdTruncateDestination = new SqlCommand($"truncate table {destinationTable}", cnDestination);
+							cmdTruncateDestination.ExecuteNonQuery();
+							Console.WriteLine("Table truncated");
+						}
+						else
+						{
+							Console.WriteLine("Truncate skipped");
+						}
+						// Note, may not be able to use TableLock with Azure, see https://www.adathedev.co.uk/2011/01/sqlbulkcopy-to-sql-server-in-parallel.html
+						using (var bc = new SqlBulkCopy(cnDestination, SqlBulkCopyOptions.TableLock, null))
+						{
+							bc.BatchSize = 4000; // see https://www.adathedev.co.uk/2011/01/sqlbulkcopy-to-sql-server-in-parallel.html, 4000 may be maximum for Azure SQL
+							bc.NotifyAfter = 1000;
+							bc.SqlRowsCopied += (sender, eventArgs) =>
+							{
+								//Console.WriteLine($"{eventArgs.RowsCopied} loaded");
+							};
+
+							bc.DestinationTableName = destinationTable;
+							// Below not needed when table structures are the same
+							//bc.ColumnMappings.Add("NotificationGroupEventTypeID", "NotificationGroupEventTypeID");
+							//bc.ColumnMappings.Add("NotificationGroupID", "NotificationGroupID");
+							//bc.ColumnMappings.Add("EventTypeID", "EventTypeID");
+							// ...
+
+							try
+							{
+								bc.WriteToServer(rdr);
+							}
+							catch (Exception ex)
+							{
+								Console.WriteLine(ex.Message);
+							}
+							finally
+							{
+								// Close the SqlDataReader. The SqlBulkCopy
+								// object is automatically closed at the end
+								// of the using block.
+								rdr.Close();
+							}
+						}
+
+						var cmdRowCount = new SqlCommand($"select count(*) from {destinationTable}", cnDestination);
+						long count = Convert.ToInt32(cmdRowCount.ExecuteScalar());
+						Console.WriteLine($"{count} rows loaded");
+					}
+				}
+			}
+			Console.WriteLine($"Took {sw.ElapsedMilliseconds} ms\n");
+		}
+
+
 		/// <summary>
 		/// Given a list of tables, returns the ones that do not exist in the destination database.
 		/// </summary>
@@ -751,7 +811,7 @@ namespace SyncChanges
 					sql += string.Join(" and ", table.KeyColumns.Select(k => $"c.{k} = t.{k}"));
 					sql += " order by coalesce(c.SYS_CHANGE_CREATION_VERSION, c.SYS_CHANGE_VERSION)";
 
-					Log.Debug($"Retrieving changes for table {tableName}: {sql}");
+					// Log.Debug($"Retrieving changes for table {tableName}: {sql}");
 
 					db.OpenSharedConnection();
 					var cmd = db.CreateCommand(db.Connection, System.Data.CommandType.Text, sql, destinationVersion);
