@@ -198,6 +198,38 @@ namespace SyncChanges
 		}
 
 		/// <summary>
+		/// Making use of SQL Change Tracking, does the initial data
+		/// population to bring the source and destination tables in sync
+		/// </summary>
+		/// <param name="sourceConnectionString"></param>
+		/// <param name="destinationConnectionString"></param>
+		/// <param name="table"></param>
+		public void DoInitialDataPopulationForTable(string sourceConnectionString, string destinationConnectionString, string table)
+		{
+			// get current sync version
+			// TODO: how do we save this with SyncChanges on initial load?
+			// Obtain the current synchronization version. This will be used next time that changes are obtained.
+			long? curVersion = GetChangeTrackingCurrentVersion(sourceConnectionString);
+			var pkColumns = Sql.GetPkColumnsForTable(sourceConnectionString, table);
+
+			var batch = Sql.GetBatchFromTable(sourceConnectionString, table, pkColumns, 500);
+			batch.First().
+			using (var cn = Sql.GetConnection(sourceConnectionString))
+				cn.
+
+
+
+
+				// import all data
+				var sql = @"
+				-- Obtain initial data set.
+				SELECT P.ProductID, P.Name, P.ListPrice
+				FROM SalesLT.Product AS P
+			";
+
+			// 
+		}
+		/// <summary>
 		/// Given a list of tables, returns the ones that do not exist in the destination database.
 		/// </summary>
 		/// <param name="connectionString"></param>
@@ -274,6 +306,23 @@ namespace SyncChanges
 			}
 
 			return ret.Distinct().ToList();
+		}
+
+		/// <summary>
+		/// List the tables with no PK
+		/// </summary>
+		/// <returns></returns>
+		public List<string> GetTablesToSyncWithNoPk(List<string> tablesToSync)
+		{
+			/*
+				SELECT TABLE_SCHEMA,
+				  TABLE_NAME
+				FROM INFORMATION_SCHEMA.TABLES
+				WHERE OBJECTPROPERTY(OBJECT_ID(CONCAT(TABLE_SCHEMA, '.', TABLE_NAME)),'TableHasPrimaryKey') = 0 
+					AND TABLE_TYPE='BASE TABLE'
+				ORDER BY TABLE_SCHEMA, TABLE_NAME
+			*/
+			throw new NotImplementedException();
 		}
 
 		/// <summary>

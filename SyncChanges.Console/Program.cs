@@ -144,8 +144,10 @@ namespace SyncChanges.Console
 						
 						foreach (var destination in replicationSet.Destinations)
 						{
-							// create destination schema if necessary
-							// TODO
+							//TODO: ensure PKs exist on new tables; do this before creating/updating anything so we 
+							// can bail quickly if needed
+
+							// TODO: create destination schema if necessary
 
 							// create destination tables if necessary
 							var missingTables = synchronizer.GetNonExistingSyncTables(destination.ConnectionString, tablesToSync);
@@ -158,10 +160,10 @@ namespace SyncChanges.Console
 							foreach(var table in tablesToSync)
 							{
 								if (Sql.GetTableRowCount(destination.ConnectionString, table) == 0)
-									Sql.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
+									synchronizer.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
 							}
 
-							// sync of destinatin tables
+							// sync of destination tables
 							var success = synchronizer.Sync();
 							Error = Error || !success;
 
@@ -233,6 +235,11 @@ namespace SyncChanges.Console
 						// change tracking enabled
 						var shouldBeEnabledButAreNot = syncTables.Where(t => !enabledTables.Any(e => e.ToLowerInvariant() == t.ToLowerInvariant()));
 						LogListMessage(shouldBeEnabledButAreNot, "Tables to Sync Without Change Tracking enabled", verboseLogging);
+
+						// these tables are required to be synced, but have no PK,
+						// so we can not enable CT on them
+						//TODO: check for tables with no PK
+						//var noPK = synchronizer.GetTablesToSyncWithNoPk(syncTables);
 
 						foreach (var destination in replicationSet.Destinations)
 						{

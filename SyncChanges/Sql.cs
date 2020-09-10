@@ -93,15 +93,45 @@ namespace SyncChanges
 		}
 
 		/// <summary>
-		/// Making use of SQL Change Tracking, does the initial data
-		/// population to bring the source and destination tables in sync
+		/// Returns the columns that make up the PK of the table.
+		/// Assumes dbo schema if none supplied.
 		/// </summary>
-		/// <param name="sourceConnectionString"></param>
-		/// <param name="destinationConnectionString"></param>
+		/// <param name="connectionString"></param>
 		/// <param name="table"></param>
-		public static void DoInitialDataPopulationForTable(string sourceConnectionString, string destinationConnectionString, string table)
+		/// <returns></returns>
+		public static List<string> GetPkColumnsForTable(string connectionString, string table)
 		{
-			throw new NotImplementedException();
+			var sql = @"
+				--declare @table nvarchar(100) = N'dbo.User'
+
+				SELECT COLUMN_NAME
+				FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+				where (PARSENAME(@table, 2) is null and TABLE_SCHEMA = 'dbo' or PARSENAME(@table, 2) = TABLE_SCHEMA)
+					and PARSENAME(@table, 1) = TABLE_NAME
+					and OBJECTPROPERTY(OBJECT_ID(CONSTRAINT_SCHEMA + '.' + QUOTENAME(CONSTRAINT_NAME)), 'IsPrimaryKey') = 1
+				order by ORDINAL_POSITION
+			";
+			using (var cn = GetConnection(connectionString))
+				return cn.Query<string>(sql, new { table }).ToList();
+		}
+
+		internal static IEnumerable<dynamic> GetBatchFromTable(string sourceConnectionString, string table, List<string> pkColumns, int batchSize = 500, int lastRowNumber = 0)
+		{
+			var normalizedTableName = NormalizeObjectName(table, null);
+			var sqlPkColumns = string.Join(", ", pkColumns);
+			var sql = $@"
+				select top (@batchSize) *
+				from (
+					select *,
+						ROW_NUMBER() over (order by {sqlPkColumns}) as _rn
+					from {normalizedTableName}
+				) x";
+			if (lastRowNumber > 0)
+				sql += "where _rn > @lastRowNumber";
+			sql += "order by _rn";
+
+			using (var cn = GetConnection(sourceConnectionString))
+				return cn.Query(sql, new { batchSize, lastRowNumber });
 		}
 	}
 }
