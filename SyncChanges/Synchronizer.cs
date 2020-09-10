@@ -684,7 +684,7 @@ namespace SyncChanges
 							for (int i = 0; i < changes.Count; i++)
 							{
 								var change = changes[i];
-								Log.Debug($"Replicating change #{i + 1} of {changes.Count} (Version {change.Version}, CreationVersion {change.CreationVersion})");
+								// Log.Debug($"Replicating change #{i + 1} of {changes.Count} (Version {change.Version}, CreationVersion {change.CreationVersion})");
 
 								foreach (var fk in change.ForeignKeyConstraintsToDisable)
 								{
@@ -912,7 +912,7 @@ namespace SyncChanges
 						string.Join(", ", Parameters(insertColumnNames.Count))) +
 						$"set IDENTITY_INSERT {tableName} OFF";
 					var insertValues = change.GetValues();
-					Log.Debug($"Executing insert: {insertSql} ({FormatArgs(insertValues)})");
+					// Log.Debug($"Executing insert: {insertSql} ({FormatArgs(insertValues)})");
 					if (!DryRun)
 						db.Execute(insertSql, insertValues);
 					break;
@@ -924,7 +924,7 @@ namespace SyncChanges
 						string.Join(", ", updateColumnNames.Select((c, i) => $"{c} = @{i + change.Keys.Count}")),
 						PrimaryKeys(table, change));
 					var updateValues = change.GetValues();
-					Log.Debug($"Executing update: {updateSql} ({FormatArgs(updateValues)})");
+					// Log.Debug($"Executing update: {updateSql} ({FormatArgs(updateValues)})");
 					if (!DryRun)
 						db.Execute(updateSql, updateValues);
 					break;
@@ -933,7 +933,7 @@ namespace SyncChanges
 				case 'D':
 					var deleteSql = string.Format("delete from {0} where {1}", tableName, PrimaryKeys(table, change));
 					var deleteValues = change.Keys.Values.ToArray();
-					Log.Debug($"Executing delete: {deleteSql} ({FormatArgs(deleteValues)})");
+					// Log.Debug($"Executing delete: {deleteSql} ({FormatArgs(deleteValues)})");
 					if (!DryRun)
 						db.Execute(deleteSql, deleteValues);
 					break;

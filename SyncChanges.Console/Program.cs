@@ -141,7 +141,7 @@ namespace SyncChanges.Console
 						var tablesNeedingChangeTrackingEnabled = tablesToSync.Where(o => !changeTrackingEnabledTables.Any(et => Sql.ObjectNamesAreEqual(o, et, "dbo")));
 						if (tablesNeedingChangeTrackingEnabled.Any())
 							synchronizer.EnableChangeTrackingForTables(replicationSet.Source.ConnectionString, tablesNeedingChangeTrackingEnabled);
-						
+
 						foreach (var destination in replicationSet.Destinations)
 						{
 							// TODO: ensure PKs exist on new tables; do this before creating/updating anything so we 
@@ -154,13 +154,19 @@ namespace SyncChanges.Console
 							foreach (var table in missingTables)
 							{
 								synchronizer.CreateDestinationTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table, destination.Schema);
+								synchronizer.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
 							}
 
 							// initial population of destination tables if necessary
-							foreach(var table in tablesToSync)
+							// TODO: add config param for this
+							var reinitializeIfEmpty = false;
+							if (reinitializeIfEmpty)
 							{
-								if (Sql.GetTableRowCount(destination.ConnectionString, table) == 0)
-									synchronizer.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
+								foreach (var table in tablesToSync)
+								{
+									if (Sql.GetTableRowCount(destination.ConnectionString, table) == 0)
+										synchronizer.DoInitialDataPopulationForTable(replicationSet.Source.ConnectionString, destination.ConnectionString, table);
+								}
 							}
 
 							// sync of destination tables
