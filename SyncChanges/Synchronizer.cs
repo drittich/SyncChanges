@@ -222,7 +222,7 @@ namespace SyncChanges
 
 			destinationTable = Sql.NormalizeObjectName(destinationTable, null);
 
-			Console.WriteLine($"Bulk-copying table {sourceTable}");
+			Log.Info($"Bulk-copying table {sourceTable}");
 
 			var sw = Stopwatch.StartNew();
 			using (var cnSource = Sql.GetConnection(sourceConnectionString))
@@ -239,11 +239,11 @@ namespace SyncChanges
 						{
 							var cmdTruncateDestination = new SqlCommand($"truncate table {destinationTable}", cnDestination);
 							cmdTruncateDestination.ExecuteNonQuery();
-							Console.WriteLine("Table truncated");
+							Log.Info("Table truncated");
 						}
 						else
 						{
-							Console.WriteLine("Truncate skipped");
+							Log.Info("Truncate skipped");
 						}
 						// Note, may not be able to use TableLock with Azure, see https://www.adathedev.co.uk/2011/01/sqlbulkcopy-to-sql-server-in-parallel.html
 						using (var bc = new SqlBulkCopy(cnDestination, SqlBulkCopyOptions.TableLock, null))
@@ -252,7 +252,7 @@ namespace SyncChanges
 							bc.NotifyAfter = 1000;
 							bc.SqlRowsCopied += (sender, eventArgs) =>
 							{
-								//Console.WriteLine($"{eventArgs.RowsCopied} loaded");
+								//Log.Info($"{eventArgs.RowsCopied} loaded");
 							};
 
 							bc.DestinationTableName = destinationTable;
@@ -268,7 +268,7 @@ namespace SyncChanges
 							}
 							catch (Exception ex)
 							{
-								Console.WriteLine(ex.Message);
+								Log.Error(ex.Message);
 							}
 							finally
 							{
@@ -281,11 +281,11 @@ namespace SyncChanges
 
 						var cmdRowCount = new SqlCommand($"select count(*) from {destinationTable}", cnDestination);
 						long count = Convert.ToInt32(cmdRowCount.ExecuteScalar());
-						Console.WriteLine($"{count} rows loaded");
+						Log.Info($"{count} rows loaded");
 					}
 				}
 			}
-			Console.WriteLine($"Took {sw.ElapsedMilliseconds} ms\n");
+			Log.Info($"Took {sw.ElapsedMilliseconds} ms\n");
 		}
 
 
@@ -1012,6 +1012,7 @@ namespace SyncChanges
 		/// <returns></returns>
 		public bool GetChangeTrackingEnabled(string connectionString)
 		{
+			Console.WriteLine(connectionString);
 			using (var db = GetDatabase(connectionString, DatabaseType.SqlServer2008))
 				return db.Query<object>(@"
                     select null

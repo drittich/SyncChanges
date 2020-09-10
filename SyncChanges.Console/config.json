@@ -4,7 +4,7 @@
 			"Name": "sensei-dev",
 			"Source": {
 				"Name": "Primary",
-				"ConnectionString": "Server=xxx(localdb)\\.\\sensei_share;AttachDbFileName=C:\\localdb\\working\\sensei_dev.mdf;Integrated Security=true;"
+				"ConnectionString": "Data Source=DARCY-MBA;Initial Catalog=sensei_dev;Integrated Security=True;MultipleActiveResultSets=True"
 			},
 			"Destinations": [
 				{
@@ -37,9 +37,11 @@
 				"dbo.Milestone",
 				"dbo.MilestoneStatus",
 				"dbo.NewsArticleUser",
+				"dbo.NotificationGroupEventTypeMember",
 				"dbo.ProductionReview",
 				"dbo.ProductionReviewUserProjectRole",
 				"dbo.Project",
+				"dbo.ProjectAssignmentHistory",
 				"dbo.ProjectStageGate",
 				"dbo.ProjectStatus2",
 				"dbo.StageGate",
